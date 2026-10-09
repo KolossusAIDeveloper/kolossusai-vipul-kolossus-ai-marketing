@@ -65,7 +65,7 @@ class LoginRequest(BaseModel):
 @app.post("/api/login")
 def login(req: LoginRequest):
     app_user = os.environ.get("APP_USER", "admin")
-    app_pass = os.environ.get("APP_PASSWORD", "")
+    app_pass = os.environ.get("USER_PASSWORD") or os.environ.get("APP_PASSWORD", "")
     if req.username == app_user and req.password == app_pass and app_pass:
         return {"token": STATIC_TOKEN}
     raise HTTPException(status_code=401, detail="Invalid credentials")
