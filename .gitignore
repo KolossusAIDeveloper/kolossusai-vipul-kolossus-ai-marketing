@@ -1,0 +1,16 @@
+.streamlit/secrets.toml
+data/kolossus.db
+backups/
+__pycache__/
+*.pyc
+*.pyo
+.env
+.DS_Store
+*.db
+
+# Never commit Excel/data files — contain personal data (mobile, email, Aadhaar)
+data/excels/
+data/*.xlsx
+data/*.xls
+*.xlsx
+*.xls
