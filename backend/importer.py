@@ -72,15 +72,6 @@ def import_excel(file_path_or_obj, source_file=None):
     inserted = updated = skipped = duplicates = quality_flags = 0
     rows_read = len(df)
 
-    mobile_first = {}
-    for _, row in df.iterrows():
-        mobile_raw = _clean_str(row.get("mobile"))
-        if mobile_raw:
-            mobile_clean = re.sub(r"\.0$", "", mobile_raw)
-            sr = _clean_str(row.get("sr_no"))
-            if mobile_clean not in mobile_first:
-                mobile_first[mobile_clean] = sr
-
     conn = db.get_conn()
     cur = conn.cursor()
 
@@ -133,21 +124,30 @@ def import_excel(file_path_or_obj, source_file=None):
             skipped += 1
             continue
 
-        possible_duplicate_of = None
-        if mobile and mobile in mobile_first and mobile_first[mobile] != sr_no_str:
-            cur.execute(
-                "SELECT id FROM users WHERE mobile = %s ORDER BY sr_no LIMIT 1", (mobile,)
-            )
-            existing = cur.fetchone()
-            if existing:
-                possible_duplicate_of = existing["id"]
-                duplicates += 1
-
         cur.execute(
             "SELECT id FROM users WHERE source_file = %s AND sr_no = %s",
             (source_file, sr_no),
         )
         existing_row = cur.fetchone()
+
+        # Flag as a possible duplicate of the oldest contact that already has this
+        # mobile, whether it came from an earlier row of this file or an earlier import.
+        # The row is still imported; this only marks it for review.
+        possible_duplicate_of = None
+        if mobile:
+            if existing_row:
+                cur.execute(
+                    "SELECT id FROM users WHERE mobile = %s AND id < %s ORDER BY id LIMIT 1",
+                    (mobile, existing_row["id"]),
+                )
+            else:
+                cur.execute(
+                    "SELECT id FROM users WHERE mobile = %s ORDER BY id LIMIT 1", (mobile,)
+                )
+            existing = cur.fetchone()
+            if existing:
+                possible_duplicate_of = existing["id"]
+                duplicates += 1
 
         try:
             if existing_row:
@@ -184,38 +184,6 @@ def import_excel(file_path_or_obj, source_file=None):
             conn.rollback()
             skipped += 1
             continue
-
-    conn.commit()
-
-    for _, row in df.iterrows():
-        mobile_raw = _clean_str(row.get("mobile"))
-        if not mobile_raw:
-            continue
-        mobile = re.sub(r"\.0$", "", mobile_raw)
-        sr_no_raw = _clean_str(row.get("sr_no"))
-        if not sr_no_raw:
-            continue
-        sr_no_str = re.sub(r"\.0$", "", sr_no_raw)
-        try:
-            sr_no = int(float(sr_no_str))
-        except ValueError:
-            continue
-
-        if mobile in mobile_first and mobile_first[mobile] != sr_no_str:
-            cur.execute(
-                "SELECT id FROM users WHERE mobile = %s ORDER BY sr_no LIMIT 1", (mobile,)
-            )
-            first = cur.fetchone()
-            cur.execute(
-                "SELECT id, possible_duplicate_of FROM users WHERE source_file = %s AND sr_no = %s",
-                (source_file, sr_no),
-            )
-            this = cur.fetchone()
-            if first and this and this["possible_duplicate_of"] is None:
-                cur.execute(
-                    "UPDATE users SET possible_duplicate_of = %s WHERE id = %s",
-                    (first["id"], this["id"]),
-                )
 
     conn.commit()
     cur.close()

@@ -1,3 +1,243 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* ------------------------------------------------------------------
+   Dark mode
+   Toggled by the sidebar switch, which puts the "dark" class on <html>.
+   Instead of adding dark: variants to every component, the light
+   utility colours used across the app are remapped here.
+   ------------------------------------------------------------------ */
+:root {
+  --pill-bg: #f9fafb;
+  --pill-text: #374151;
+}
+
+html.dark {
+  color-scheme: dark; /* dark scrollbars, date pickers and native controls */
+  --pill-bg: #1e293b;
+  --pill-text: #e2e8f0;
+}
+
+html.dark body { background-color: #0f172a; color: #e2e8f0; }
+
+/* Surfaces */
+html.dark .bg-gray-100 { background-color: #0f172a; }
+html.dark .bg-white:not(.bg-opacity-30) { background-color: #1e293b; }
+html.dark .bg-gray-50 { background-color: #172234; }
+html.dark .bg-gray-50\/50 { background-color: #1a2638; } /* striped table rows */
+html.dark .bg-gray-200 { background-color: #334155; }
+html.dark .disabled\:bg-gray-100:disabled { background-color: #0b1322; }
+
+/* Text */
+html.dark .text-gray-900,
+html.dark .text-gray-800 { color: #f1f5f9; }
+html.dark .text-gray-700 { color: #e2e8f0; }
+html.dark .text-gray-600 { color: #cbd5e1; }
+html.dark .text-gray-500,
+html.dark .text-gray-400 { color: #94a3b8; }
+
+/* Borders */
+html.dark .border-gray-100,
+html.dark .border-gray-200,
+html.dark .border-gray-300 { border-color: #334155; }
+
+/* Hover states */
+html.dark .hover\:bg-gray-50:hover,
+html.dark .hover\:bg-gray-100:hover { background-color: #273449; }
+html.dark .hover\:bg-blue-50:hover { background-color: rgb(59 130 246 / 0.18); }
+html.dark .hover\:bg-red-50:hover { background-color: rgb(239 68 68 / 0.15); }
+html.dark .hover\:text-blue-700:hover { color: #bfdbfe; }
+html.dark .hover\:text-indigo-900:hover { color: #e0e7ff; }
+
+/* Tinted panels, badges and their borders */
+html.dark .bg-blue-50 { background-color: rgb(59 130 246 / 0.12); }
+html.dark .bg-blue-100 { background-color: rgb(59 130 246 / 0.22); }
+html.dark .bg-indigo-50 { background-color: rgb(99 102 241 / 0.12); }
+html.dark .bg-indigo-100 { background-color: rgb(99 102 241 / 0.25); }
+html.dark .bg-green-50 { background-color: rgb(34 197 94 / 0.12); }
+html.dark .bg-yellow-50 { background-color: rgb(234 179 8 / 0.12); }
+html.dark .bg-orange-50 { background-color: rgb(249 115 22 / 0.12); }
+html.dark .bg-red-50 { background-color: rgb(239 68 68 / 0.12); }
+html.dark .border-blue-200 { border-color: rgb(59 130 246 / 0.35); }
+html.dark .border-blue-300 { border-color: rgb(59 130 246 / 0.5); }
+html.dark .border-indigo-200 { border-color: rgb(99 102 241 / 0.35); }
+html.dark .border-green-200 { border-color: rgb(34 197 94 / 0.35); }
+html.dark .border-yellow-200 { border-color: rgb(234 179 8 / 0.35); }
+html.dark .border-orange-200 { border-color: rgb(249 115 22 / 0.35); }
+html.dark .border-red-200,
+html.dark .border-red-300 { border-color: rgb(239 68 68 / 0.4); }
+
+/* Coloured text, lightened to stay readable on dark surfaces */
+html.dark .text-blue-800,
+html.dark .text-blue-700 { color: #93c5fd; }
+html.dark .text-blue-600,
+html.dark .text-blue-500 { color: #60a5fa; }
+html.dark .text-indigo-700,
+html.dark .text-indigo-600 { color: #a5b4fc; }
+html.dark .text-green-700,
+html.dark .text-green-600 { color: #4ade80; }
+html.dark .text-red-600,
+html.dark .text-red-500 { color: #f87171; }
+html.dark .text-yellow-600 { color: #facc15; }
+html.dark .text-orange-600 { color: #fb923c; }
+
+/* Form controls */
+html.dark input:not([type=checkbox]):not([type=radio]),
+html.dark select,
+html.dark textarea { background-color: #0f172a; color: #e2e8f0; }
+html.dark input::placeholder,
+html.dark textarea::placeholder { color: #64748b; }
+
+/* Status badges: keep very dark colours (e.g. "Do Not Contact") visible */
+html.dark .status-badge { box-shadow: 0 0 0 1px rgb(255 255 255 / 0.25); }
+
+/* Charts (recharts) */
+html.dark .recharts-cartesian-axis-tick-value { fill: #94a3b8; }
+html.dark .recharts-cartesian-grid line { stroke: #334155; }
+html.dark .recharts-cartesian-axis-line,
+html.dark .recharts-cartesian-axis-tick-line { stroke: #475569; }
+html.dark .recharts-default-tooltip {
+  background-color: #1e293b !important;
+  border-color: #334155 !important;
+  color: #e2e8f0;
+}
+html.dark .recharts-tooltip-cursor { fill: rgb(148 163 184 / 0.12); }
+
+/* Sidebar bottom buttons: a soft purple wash that melts into the gradient */
+.sidebar-soft-btn {
+  background: linear-gradient(90deg, rgb(78 20 140 / 0.38) 0%, rgb(78 20 140 / 0.12) 100%);
+  transition: background 0.2s ease;
+}
+.sidebar-soft-btn:hover {
+  background: linear-gradient(90deg, rgb(78 20 140 / 0.55) 0%, rgb(78 20 140 / 0.22) 100%);
+}
+
+/* Brand gradients (sidebar + contact name bar) in dark mode: the same colours, a little deeper.
+   A dark shade fades in over them so the switch is smooth.
+   To revert, delete this block (and the "brand-gradient" class in Layout.tsx / ContactDetail.tsx). */
+.brand-gradient { position: relative; isolation: isolate; }
+.brand-gradient > * { position: relative; z-index: 1; }
+.brand-gradient::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: rgb(0 0 0 / 0.3);
+  opacity: 0;
+  transition: opacity 0.4s ease;
+  pointer-events: none;
+}
+html.dark .brand-gradient::before { opacity: 1; }
+
+/* Follow-up form: boxed fields with an icon cell, uppercase label and ✓ / ✕ status */
+.fu-field {
+  display: flex;
+  align-items: stretch;
+  background: #fff;
+  border: 2px solid #cbd5e1;
+  border-radius: 10px;
+  overflow: hidden;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.fu-field:focus-within { border-color: #02C3BD; box-shadow: 0 0 0 3px rgb(2 195 189 / 0.18); }
+.fu-field.is-bad { border-color: #ef4444; }
+.fu-field.is-bad:focus-within { box-shadow: 0 0 0 3px rgb(239 68 68 / 0.15); }
+.fu-field.is-disabled { opacity: 0.55; }
+.fu-icon {
+  width: 38px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #475569;
+  background: #f8fafc;
+  border-right: 2px solid #cbd5e1;
+}
+.fu-body { flex: 1; min-width: 0; padding: 6px 4px 4px 9px; }
+.fu-label {
+  display: block;
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: #475569;
+}
+.fu-control {
+  width: 100%;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  font-size: 14px;
+  color: #0f172a;
+  padding: 1px 0 2px;
+}
+.fu-control:disabled { cursor: not-allowed; }
+textarea.fu-control { resize: vertical; }
+input[type=datetime-local].fu-control { font-size: 13px; letter-spacing: -0.01em; }
+.fu-status { width: 30px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; }
+
+html.dark .fu-field { background: #0f172a; border-color: #334155; }
+html.dark .fu-field.is-bad { border-color: #ef4444; }
+html.dark .fu-field:focus-within { border-color: #02C3BD; }
+html.dark .fu-icon { background: #1e293b; border-color: #334155; color: #94a3b8; }
+html.dark .fu-label { color: #94a3b8; }
+html.dark .fu-control { color: #e2e8f0; background: transparent !important; }
+
+/* Page background: a soft plaster texture (generated noise, no image file).
+   Layers: sparse specks/pits, fine grain, soft cloudy patches, over a warm off-white base.
+   Cards keep their plain surface; dark mode blends the same texture into the navy (see html.dark .app-bg). */
+:root {
+  --plaster-specks: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='320' height='320'><filter id='s'><feTurbulence type='fractalNoise' baseFrequency='0.32' numOctaves='3' seed='7' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.45  0 0 0 0 0.43  0 0 0 0 0.39  14 0 0 0 -9.4'/></filter><rect width='100%' height='100%' filter='url(%23s)' opacity='0.45'/></svg>");
+  --plaster-grain: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='240' height='240'><filter id='g'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/><feColorMatrix type='saturate' values='0'/></filter><rect width='100%' height='100%' filter='url(%23g)' opacity='0.13'/></svg>");
+  --plaster-mottle: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='600' height='600'><filter id='m'><feTurbulence type='fractalNoise' baseFrequency='0.014' numOctaves='4' stitchTiles='stitch'/><feColorMatrix type='saturate' values='0'/></filter><rect width='100%' height='100%' filter='url(%23m)' opacity='0.10'/></svg>");
+}
+.app-bg {
+  background-color: #f3f1ea;
+  background-image: var(--plaster-specks), var(--plaster-grain), var(--plaster-mottle);
+}
+/* Dark mode: the same texture on a faded layer behind the page, so the specks show as faint flecks on the navy */
+.app-bg { position: relative; }
+.app-bg > * { position: relative; z-index: 1; }
+html.dark .app-bg { background-color: #0f172a; background-image: none; }
+html.dark .app-bg::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: var(--plaster-specks), var(--plaster-mottle);
+  mix-blend-mode: screen;
+  opacity: 0.35;
+  pointer-events: none;
+}
+
+/* Sidebar header: KolossusAI logo on the sidebar's own gradient */
+.brand-header {
+  color: #fff;
+  border-bottom: 1px solid rgb(255 255 255 / 0.2);
+}
+.brand-logo {
+  width: 36px;
+  height: 36px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #8B5CF6 0%, #A855F7 100%);
+  color: #fff;
+  font-weight: 800;
+  font-size: 18px;
+  box-shadow: 0 2px 6px rgb(76 29 149 / 0.35);
+}
+
+/* Same plaster texture on the sidebar, blended into its gradient */
+.textured::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: var(--plaster-specks), var(--plaster-grain), var(--plaster-mottle);
+  border-radius: inherit;
+  mix-blend-mode: overlay;
+  filter: contrast(1.6); /* a touch more visible than the page background */
+  pointer-events: none;
+}

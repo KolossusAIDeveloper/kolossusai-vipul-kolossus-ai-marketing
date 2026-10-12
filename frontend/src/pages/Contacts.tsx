@@ -1,6 +1,6 @@
-import React, { useEffect, useState, useCallback } from 'react'
+import React, { useEffect, useState, useCallback, useRef } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { getContacts, getStats } from '../api'
+import { getContacts, getStats, exportCsv } from '../api'
 import StatusBadge, { STATUS_COLORS } from '../components/StatusBadge'
 
 const STATUSES = [
@@ -48,6 +48,7 @@ export default function Contacts() {
   // Read initial filters from URL params (e.g. from Dashboard KPI card clicks)
   const initStatuses = searchParams.get('statuses') ? [searchParams.get('statuses')!] : []
   const initLastFollowupFilter = searchParams.get('last_followup_filter') ?? ''
+  const initNextFollowupFilter = searchParams.get('next_followup_filter') ?? ''
 
   const [contacts, setContacts] = useState<Contact[]>([])
   const [total, setTotal] = useState(0)
@@ -63,8 +64,9 @@ export default function Contacts() {
   const [loading, setLoading] = useState(true)
   const [selectedStatuses, setSelectedStatuses] = useState<string[]>(initStatuses)
   const [search, setSearch] = useState('')
+  const [debouncedSearch, setDebouncedSearch] = useState('')
   const [idSearch, setIdSearch] = useState('')
-  const [nextFollowupFilter, setNextFollowupFilter] = useState('')
+  const [nextFollowupFilter, setNextFollowupFilter] = useState(initNextFollowupFilter)
   const [lastFollowupFilter, setLastFollowupFilter] = useState(initLastFollowupFilter)
   const [company_types, setCompanyTypes] = useState<string[]>([])
   const [sectors, setSectors] = useState<string[]>([])
@@ -72,13 +74,25 @@ export default function Contacts() {
   const [assignedTos, setAssignedTos] = useState<string[]>([])
   const [priorities, setPriorities] = useState<string[]>([])
   const [showFilters, setShowFilters] = useState(false)
+  const [exporting, setExporting] = useState(false)
+
+  async function handleExport() {
+    setExporting(true)
+    try {
+      await exportCsv(buildFilters())
+    } catch {
+      window.alert('Export failed. Please try again.')
+    } finally {
+      setExporting(false)
+    }
+  }
 
   const totalPages = Math.max(1, Math.ceil(total / pageSize))
 
   const buildFilters = useCallback(() => {
     const f: Record<string, string> = {}
     if (selectedStatuses.length) f.statuses = selectedStatuses.join(',')
-    if (search) f.search = search
+    if (debouncedSearch) f.search = debouncedSearch
     if (idSearch) f.id_search = idSearch
     if (nextFollowupFilter) f.next_followup_filter = nextFollowupFilter
     if (lastFollowupFilter) f.last_followup_filter = lastFollowupFilter
@@ -90,7 +104,7 @@ export default function Contacts() {
     f.sort_by = sortBy
     f.sort_dir = sortDir
     return f
-  }, [selectedStatuses, search, idSearch, nextFollowupFilter, lastFollowupFilter, company_types, sectors, cities, assignedTos, priorities, sortBy, sortDir])
+  }, [selectedStatuses, debouncedSearch, idSearch, nextFollowupFilter, lastFollowupFilter, company_types, sectors, cities, assignedTos, priorities, sortBy, sortDir])
 
   useEffect(() => {
     getStats().then(d => {
@@ -99,17 +113,33 @@ export default function Contacts() {
     })
   }, [])
 
+  // Only fire the search request once typing pauses
   useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search.trim()), 300)
+    return () => clearTimeout(t)
+  }, [search])
+
+  const filterKey = JSON.stringify(buildFilters())
+  const lastFilterKey = useRef(filterKey)
+
+  useEffect(() => {
+    // Filters changed while on a later page: jump to page 1 and let that run do the fetch
+    if (lastFilterKey.current !== filterKey) {
+      lastFilterKey.current = filterKey
+      if (page !== 1) { setPage(1); return }
+    }
+    // Cancel the previous request so a slow, outdated response can't overwrite newer results
+    const controller = new AbortController()
     setLoading(true)
-    getContacts(buildFilters(), page, pageSize).then(d => {
+    getContacts(JSON.parse(filterKey), page, pageSize, controller.signal).then(d => {
       setContacts(d.items)
       setTotal(d.total)
       setLoading(false)
-    }).catch(() => setLoading(false))
-  }, [buildFilters, page, pageSize])
-
-  // Reset to page 1 whenever filters change
-  useEffect(() => { setPage(1) }, [buildFilters, pageSize])
+    }).catch(() => {
+      if (!controller.signal.aborted) setLoading(false)
+    })
+    return () => controller.abort()
+  }, [filterKey, page, pageSize])
 
   function handleSort(col: string) {
     if (sortBy === col) {
@@ -137,6 +167,7 @@ export default function Contacts() {
   function clearFilters() {
     setSelectedStatuses([])
     setSearch('')
+    setDebouncedSearch('')
     setIdSearch('')
     setNextFollowupFilter('')
     setLastFollowupFilter('')
@@ -182,6 +213,14 @@ export default function Contacts() {
             </button>
           )}
           <button
+            onClick={handleExport}
+            disabled={exporting || total === 0}
+            title="Download the contacts matching the current filters as CSV"
+            className="border border-gray-300 text-gray-700 px-3 py-1.5 rounded text-sm whitespace-nowrap hover:bg-gray-50 disabled:opacity-50"
+          >
+            {exporting ? 'Exporting…' : '⬇ Export CSV'}
+          </button>
+          <button
             onClick={() => setShowFilters(f => !f)}
             className={`border px-3 py-1.5 rounded text-sm whitespace-nowrap ${showFilters ? 'bg-blue-50 border-blue-300 text-blue-700' : 'border-gray-300 text-gray-700 hover:bg-gray-50'}`}
           >
@@ -221,9 +260,9 @@ export default function Contacts() {
               title={`${count} total contacts with status "${s}"`}
               style={selected
                 ? { backgroundColor: STATUS_COLORS[s], color: '#fff', border: `2px solid ${STATUS_COLORS[s]}` }
-                : { backgroundColor: '#f9fafb', color: '#374151', border: `2px solid ${STATUS_COLORS[s]}` }
+                : { backgroundColor: 'var(--pill-bg)', color: 'var(--pill-text)', border: `2px solid ${STATUS_COLORS[s]}` }
               }
-              className="px-3 py-1 rounded-full text-xs font-semibold transition-all hover:opacity-90"
+              className="status-badge px-3 py-1 rounded-full text-xs font-semibold transition-all hover:opacity-90"
             >
               <span style={!selected ? { color: STATUS_COLORS[s] } : {}} className="mr-1">●</span>
               {s}

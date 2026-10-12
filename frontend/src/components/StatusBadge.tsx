@@ -19,6 +19,7 @@ export default function StatusBadge({ status }: { status: string }) {
   const color = STATUS_COLORS[status] ?? '#9e9e9e'
   return (
     <span
+      className="status-badge"
       style={{ backgroundColor: color, color: '#fff', padding: '2px 10px', borderRadius: '12px', fontSize: '0.78rem', fontWeight: 600, whiteSpace: 'nowrap', display: 'inline-block' }}
     >
       {status}

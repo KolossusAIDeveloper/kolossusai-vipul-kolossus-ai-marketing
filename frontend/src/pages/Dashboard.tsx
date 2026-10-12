@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  PieChart, Pie, Cell, Legend
+  Cell
 } from 'recharts'
 import { getStats } from '../api'
 import StatusBadge, { STATUS_COLORS } from '../components/StatusBadge'
@@ -28,14 +28,7 @@ interface KPIs {
 interface ChartItem { name: string; value: number }
 interface ChartData {
   by_sector: ChartItem[]
-  by_company_type: ChartItem[]
-  by_city: ChartItem[]
-  by_msme: ChartItem[]
 }
-
-const COMPANY_TYPE_COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6']
-const CITY_COLORS = ['#06b6d4', '#84cc16', '#f97316', '#ec4899', '#a78bfa']
-const MSME_COLORS = ['#3b82f6', '#10b981', '#f59e0b']
 
 const STATUSES = [
   "New","Attempted - No Answer","Contacted","Interested","Follow-up Scheduled",
@@ -176,85 +169,6 @@ export default function Dashboard() {
                 <Tooltip formatter={(value) => [value, 'Contacts']} contentStyle={{ fontSize: 12 }} />
                 <Bar dataKey="value" fill="#3b82f6" radius={[0, 4, 4, 0]} />
               </BarChart>
-            </ResponsiveContainer>
-          )}
-        </div>
-      </div>
-
-      {/* Charts Row 2: Company Type Pie + City Bar + MSME Pie */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-
-        {/* Company Type Pie */}
-        <div className="bg-white rounded-xl shadow p-5">
-          <h2 className="text-base font-semibold text-gray-700 mb-4">Company Type</h2>
-          {!chartData?.by_company_type?.length ? (
-            <p className="text-gray-400 text-sm">No data</p>
-          ) : (
-            <ResponsiveContainer width="100%" height={220}>
-              <PieChart>
-                <Pie
-                  data={chartData.by_company_type}
-                  cx="50%"
-                  cy="45%"
-                  outerRadius={75}
-                  dataKey="value"
-                  label={({ name, value }) => `${name}: ${value}`}
-                  labelLine={true}
-                >
-                  {chartData.by_company_type.map((_, i) => (
-                    <Cell key={i} fill={COMPANY_TYPE_COLORS[i % COMPANY_TYPE_COLORS.length]} />
-                  ))}
-                </Pie>
-                <Tooltip formatter={(value) => [value, 'Contacts']} contentStyle={{ fontSize: 12 }} />
-              </PieChart>
-            </ResponsiveContainer>
-          )}
-        </div>
-
-        {/* City Bar */}
-        <div className="bg-white rounded-xl shadow p-5">
-          <h2 className="text-base font-semibold text-gray-700 mb-4">Contacts by City</h2>
-          {!chartData?.by_city?.length ? (
-            <p className="text-gray-400 text-sm">No city data</p>
-          ) : (
-            <ResponsiveContainer width="100%" height={220}>
-              <BarChart data={chartData.by_city} margin={{ left: 0, right: 10, top: 0, bottom: 30 }}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                <XAxis dataKey="name" tick={{ fontSize: 11 }} angle={-20} textAnchor="end" />
-                <YAxis allowDecimals={false} tick={{ fontSize: 11 }} />
-                <Tooltip formatter={(value) => [value, 'Contacts']} contentStyle={{ fontSize: 12 }} />
-                <Bar dataKey="value" radius={[4, 4, 0, 0]}>
-                  {chartData.by_city.map((_, i) => (
-                    <Cell key={i} fill={CITY_COLORS[i % CITY_COLORS.length]} />
-                  ))}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          )}
-        </div>
-
-        {/* MSME Type Pie */}
-        <div className="bg-white rounded-xl shadow p-5">
-          <h2 className="text-base font-semibold text-gray-700 mb-4">MSME Type</h2>
-          {!chartData?.by_msme?.length ? (
-            <p className="text-gray-400 text-sm">No MSME data</p>
-          ) : (
-            <ResponsiveContainer width="100%" height={220}>
-              <PieChart>
-                <Pie
-                  data={chartData.by_msme}
-                  cx="50%"
-                  cy="45%"
-                  outerRadius={75}
-                  dataKey="value"
-                  label={({ name, value }) => `${name}: ${value}`}
-                >
-                  {chartData.by_msme.map((_, i) => (
-                    <Cell key={i} fill={MSME_COLORS[i % MSME_COLORS.length]} />
-                  ))}
-                </Pie>
-                <Tooltip formatter={(value) => [value, 'Contacts']} contentStyle={{ fontSize: 12 }} />
-              </PieChart>
             </ResponsiveContainer>
           )}
         </div>

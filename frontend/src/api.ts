@@ -20,12 +20,12 @@ export async function getStats() {
   return res.data
 }
 
-export async function getContacts(filters: Record<string, string> = {}, page = 1, pageSize = 100) {
+export async function getContacts(filters: Record<string, string> = {}, page = 1, pageSize = 100, signal?: AbortSignal) {
   const params = new URLSearchParams()
   Object.entries(filters).forEach(([k, v]) => { if (v) params.set(k, v) })
   params.set('page', String(page))
   params.set('page_size', String(pageSize))
-  const res = await api.get('/contacts?' + params.toString())
+  const res = await api.get('/contacts?' + params.toString(), { signal })
   return res.data as { items: Contact[]; total: number; page: number; page_size: number }
 }
 
@@ -80,6 +80,7 @@ export async function exportCsv(filters: Record<string, string> = {}) {
   const res = await fetch('/api/export-csv?' + params.toString(), {
     headers: { Authorization: `Bearer ${token}` }
   })
+  if (!res.ok) throw new Error(`Export failed (HTTP ${res.status})`)
   const blob = await res.blob()
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')

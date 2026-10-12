@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { getContact, updateContact, getFollowups, addFollowup, updateFollowup, deleteFollowup } from '../api'
 import StatusBadge from '../components/StatusBadge'
+import FormField, { FieldStatus } from '../components/FormField'
 
 const STATUSES = [
   "New","Attempted - No Answer","Contacted","Interested","Follow-up Scheduled",
@@ -11,6 +12,18 @@ const STATUSES = [
 const CHANNELS = ["Call","WhatsApp","Email","SMS","Meeting","Video Call","Visit","LinkedIn","Other"]
 const CALL_RESULTS = ["Connected","No Answer","Busy","Switched Off","Wrong Number","Replied","Not Replied"]
 const CLOSED = new Set(["Converted","Not Interested","Invalid / Wrong Number","Do Not Contact"])
+
+// Readable message from a failed API call (uses the backend's "detail" when present)
+function apiError(e: unknown, fallback: string) {
+  const detail = (e as { response?: { data?: { detail?: unknown } } })?.response?.data?.detail
+  return typeof detail === 'string' ? detail : fallback
+}
+
+// Current local time as "YYYY-MM-DDTHH:MM" for datetime-local inputs (toISOString() would give UTC)
+function nowLocal() {
+  const d = new Date()
+  return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16)
+}
 
 function fmtDate(val: string | null | undefined) {
   if (!val) return ''
@@ -105,7 +118,7 @@ export default function ContactDetail() {
   const [saving, setSaving] = useState(false)
   const [showAddFollowup, setShowAddFollowup] = useState(true)
   const [fpData, setFpData] = useState({
-    followup_at: new Date().toISOString().slice(0, 16),
+    followup_at: nowLocal(),
     channel: 'Call',
     direction: 'Outbound',
     call_result: '',
@@ -119,6 +132,7 @@ export default function ContactDetail() {
     next_followup_at: '',
   })
   const [fpError, setFpError] = useState('')
+  const [fpTried, setFpTried] = useState(false)
   const [fpSaving, setFpSaving] = useState(false)
   const [editFollowupId, setEditFollowupId] = useState<number | null>(null)
   const [editFpData, setEditFpData] = useState<Record<string, string>>({})
@@ -147,6 +161,8 @@ export default function ContactDetail() {
       const updated = await updateContact(contact.id, editData)
       setContact(updated)
       setEditMode(false)
+    } catch (e) {
+      window.alert(apiError(e, 'Could not save changes. Please try again.'))
     } finally {
       setSaving(false)
     }
@@ -157,17 +173,19 @@ export default function ContactDetail() {
     if (!fpData.status_after) return 'Status is required'
     if (!fpData.contacted_by) return 'Contacted by is required'
     if (['Connected', 'Replied'].includes(fpData.call_result) && !fpData.customer_said) return 'Customer said is required when Connected/Replied'
+    if (!fpData.followup_at) return 'Date & Time is required'
+    if (fpData.followup_at > nowLocal()) return 'Date & Time cannot be in the future'
+    // Next follow-up is optional; if set it must be after the follow-up and after now
     if (!CLOSED.has(fpData.status_after) && fpData.next_followup_at) {
-      const nfd = new Date(fpData.next_followup_at)
-      const today = new Date(); today.setHours(0,0,0,0)
-      if (nfd < today) return 'Next follow-up date cannot be in the past'
+      if (fpData.next_followup_at <= fpData.followup_at) return 'Next follow-up must be after the follow-up Date & Time'
+      if (fpData.next_followup_at <= nowLocal()) return 'Next follow-up must be after the current date and time'
     }
     return ''
   }
 
   async function submitFollowup() {
     const err = validateFollowup()
-    if (err) { setFpError(err); return }
+    if (err) { setFpError(err); setFpTried(true); return }
     setFpError('')
     setFpSaving(true)
     try {
@@ -175,16 +193,17 @@ export default function ContactDetail() {
         ...fpData,
         duration_min: fpData.duration_min ? Number(fpData.duration_min) : null,
         call_result: fpData.call_result || null,
-        next_followup_at: fpData.next_followup_at || null,
+        next_followup_at: CLOSED.has(fpData.status_after) ? null : (fpData.next_followup_at || null),
         status_before: contact?.current_status,
       })
       const [c, f] = await Promise.all([getContact(Number(id)), getFollowups(Number(id))])
       setContact(c)
       setFollowups(f)
       setShowAddFollowup(true)
+      setFpTried(false)
       setFpData(prev => ({
         ...prev,
-        followup_at: new Date().toISOString().slice(0, 16),
+        followup_at: nowLocal(),
         channel: 'Call',
         direction: 'Outbound',
         call_result: '',
@@ -197,6 +216,8 @@ export default function ContactDetail() {
         next_action: '',
         next_followup_at: '',
       }))
+    } catch (e) {
+      setFpError(apiError(e, 'Could not save the follow-up. Please try again.'))
     } finally {
       setFpSaving(false)
     }
@@ -204,18 +225,54 @@ export default function ContactDetail() {
 
   async function handleDeleteFollowup(fid: number) {
     if (!window.confirm('Delete this follow-up entry?')) return
-    await deleteFollowup(fid)
-    const [c, f] = await Promise.all([getContact(Number(id)), getFollowups(Number(id))])
-    setContact(c)
-    setFollowups(f)
+    try {
+      await deleteFollowup(fid)
+      const [c, f] = await Promise.all([getContact(Number(id)), getFollowups(Number(id))])
+      setContact(c)
+      setFollowups(f)
+    } catch (e) {
+      window.alert(apiError(e, 'Could not delete the follow-up. Please try again.'))
+    }
   }
 
   async function saveEditFollowup(fid: number) {
-    await updateFollowup(fid, editFpData)
-    const [c, f] = await Promise.all([getContact(Number(id)), getFollowups(Number(id))])
-    setContact(c)
-    setFollowups(f)
-    setEditFollowupId(null)
+    if (editFpData.followup_at !== undefined) {
+      if (!editFpData.followup_at) { window.alert('Date & Time is required'); return }
+      if (editFpData.followup_at > nowLocal()) { window.alert('Date & Time cannot be in the future'); return }
+    }
+    try {
+      await updateFollowup(fid, editFpData)
+      const [c, f] = await Promise.all([getContact(Number(id)), getFollowups(Number(id))])
+      setContact(c)
+      setFollowups(f)
+      setEditFollowupId(null)
+    } catch (e) {
+      window.alert(apiError(e, 'Could not save the follow-up. Please try again.'))
+    }
+  }
+
+  // ✓ / ✕ for each follow-up field (same rules as validateFollowup)
+  const nowStr = nowLocal()
+  const nextLocked = !fpData.followup_at || CLOSED.has(fpData.status_after)
+  const needSaid = ['Connected', 'Replied'].includes(fpData.call_result)
+  function mark(required: boolean, filled: boolean, valid = true): FieldStatus {
+    if (filled) return valid ? 'ok' : 'bad'
+    return required && fpTried ? 'bad' : null
+  }
+  const fs = {
+    followup_at: mark(true, !!fpData.followup_at, fpData.followup_at <= nowStr),
+    channel: mark(true, !!fpData.channel),
+    direction: mark(false, !!fpData.direction),
+    call_result: mark(false, !!fpData.call_result),
+    duration_min: mark(false, fpData.duration_min !== '', Number(fpData.duration_min) >= 0),
+    contacted_by: mark(true, !!fpData.contacted_by),
+    spoke_with: mark(false, !!fpData.spoke_with.trim()),
+    status_after: mark(true, !!fpData.status_after),
+    customer_said: mark(needSaid, !!fpData.customer_said.trim()),
+    our_notes: mark(false, !!fpData.our_notes.trim()),
+    next_action: mark(false, !!fpData.next_action.trim()),
+    next_followup_at: nextLocked ? null : mark(false, !!fpData.next_followup_at,
+      fpData.next_followup_at > fpData.followup_at && fpData.next_followup_at > nowStr),
   }
 
   if (loading) return <div className="p-8 text-gray-400">Loading...</div>
@@ -224,19 +281,27 @@ export default function ContactDetail() {
   return (
     <div className="p-6 space-y-6">
       {/* Header */}
-      <div className="flex items-center gap-4">
-        <button onClick={() => navigate('/contacts')} className="text-blue-600 hover:underline text-sm">&larr; Back</button>
+      <div
+        className="brand-gradient textured flex items-center gap-4 rounded-xl px-5 py-4 shadow text-white"
+        style={{ background: 'linear-gradient(90deg, #4E148C 0%, #02C3BD 100%)' }}
+      >
+        <button
+          onClick={() => navigate('/contacts')}
+          className="text-sm text-white px-3 py-1 rounded-lg bg-white/15 hover:bg-white/25 transition-colors"
+        >
+          &larr; Back
+        </button>
         <div className="flex-1">
-          <div className="flex items-center gap-3">
-            <h1 className="text-2xl font-bold text-gray-900">{contact.full_name}</h1>
+          <div className="flex items-center gap-3 flex-wrap">
+            <h1 className="text-2xl font-bold text-white" style={{ textShadow: '0 1px 2px rgb(0 0 0 / 0.2)' }}>{contact.full_name}</h1>
             <StatusBadge status={contact.current_status} />
             {contact.possible_duplicate_of && (
-              <span className="text-yellow-600 text-sm bg-yellow-50 border border-yellow-200 px-2 py-0.5 rounded">
+              <span className="text-yellow-800 text-sm bg-white/90 px-2 py-0.5 rounded">
                 ⚠ Possible duplicate of #{contact.possible_duplicate_of}
               </span>
             )}
             {contact.data_quality_flag && (
-              <span className="text-orange-600 text-sm bg-orange-50 border border-orange-200 px-2 py-0.5 rounded">
+              <span className="text-orange-700 text-sm bg-white/90 px-2 py-0.5 rounded">
                 ⚠ {contact.data_quality_flag}
               </span>
             )}
@@ -296,7 +361,7 @@ export default function ContactDetail() {
                 <label className="block text-xs text-gray-500 mb-0.5">Interest Level</label>
                 <select
                   defaultValue={contact.interest_level ?? ''}
-                  onChange={e => setEditData(prev => ({ ...prev, interest_level: e.target.value || undefined }))}
+                  onChange={e => setEditData(prev => ({ ...prev, interest_level: e.target.value || null } as Partial<Contact>))}
                   className="w-full border border-gray-300 rounded px-2 py-1 text-sm"
                 >
                   <option value="">None</option>
@@ -377,83 +442,95 @@ export default function ContactDetail() {
           </div>
 
           {/* Add Follow-up */}
-          <div className="bg-blue-50 border border-blue-200 rounded-xl shadow p-5">
+          <div className="bg-white border border-gray-200 rounded-xl shadow-lg p-5">
             <div className="flex items-center justify-between mb-4 cursor-pointer" onClick={() => setShowAddFollowup(s => !s)}>
               <div className="flex items-center gap-2">
                 <span className="text-xl">➕</span>
-                <h2 className="font-bold text-blue-800 text-base">Add Follow-up</h2>
+                <h2 className="font-bold text-gray-800 text-base">Add Follow-up</h2>
               </div>
-              <span className="text-blue-600 text-sm">{showAddFollowup ? '▲ Collapse' : '▼ Expand'}</span>
+              <span className="text-gray-500 text-sm">{showAddFollowup ? '▲ Collapse' : '▼ Expand'}</span>
             </div>
             {showAddFollowup && (
               <div className="space-y-3 text-sm">
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-xs text-gray-500 mb-0.5">Date & Time *</label>
-                    <input type="datetime-local" value={fpData.followup_at} onChange={e => setFpData(p => ({ ...p, followup_at: e.target.value }))} className="w-full border border-gray-300 rounded px-2 py-1 text-sm" />
-                  </div>
-                  <div>
-                    <label className="block text-xs text-gray-500 mb-0.5">Channel *</label>
-                    <select value={fpData.channel} onChange={e => setFpData(p => ({ ...p, channel: e.target.value }))} className="w-full border border-gray-300 rounded px-2 py-1 text-sm">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <FormField icon="calendar" label="Date & Time" htmlFor="fu-at" required status={fs.followup_at}>
+                    <input id="fu-at" type="datetime-local" max={nowLocal()} value={fpData.followup_at} onChange={e => setFpData(p => ({ ...p, followup_at: e.target.value, next_followup_at: e.target.value ? p.next_followup_at : '' }))} className="fu-control" />
+                  </FormField>
+                  <FormField icon="chat" label="Channel" htmlFor="fu-channel" required status={fs.channel}>
+                    <select id="fu-channel" value={fpData.channel} onChange={e => setFpData(p => ({ ...p, channel: e.target.value }))} className="fu-control">
                       {CHANNELS.map(c => <option key={c}>{c}</option>)}
                     </select>
-                  </div>
-                  <div>
-                    <label className="block text-xs text-gray-500 mb-0.5">Direction</label>
-                    <select value={fpData.direction} onChange={e => setFpData(p => ({ ...p, direction: e.target.value }))} className="w-full border border-gray-300 rounded px-2 py-1 text-sm">
+                  </FormField>
+                  <FormField icon="arrows" label="Direction" htmlFor="fu-direction" status={fs.direction}>
+                    <select id="fu-direction" value={fpData.direction} onChange={e => setFpData(p => ({ ...p, direction: e.target.value }))} className="fu-control">
                       <option>Outbound</option>
                       <option>Inbound</option>
                     </select>
-                  </div>
-                  <div>
-                    <label className="block text-xs text-gray-500 mb-0.5">Call Result</label>
-                    <select value={fpData.call_result} onChange={e => setFpData(p => ({ ...p, call_result: e.target.value }))} className="w-full border border-gray-300 rounded px-2 py-1 text-sm">
+                  </FormField>
+                  <FormField icon="phone" label="Call Result" htmlFor="fu-result" status={fs.call_result}>
+                    <select id="fu-result" value={fpData.call_result} onChange={e => setFpData(p => ({ ...p, call_result: e.target.value }))} className="fu-control">
                       <option value="">None</option>
                       {CALL_RESULTS.map(r => <option key={r}>{r}</option>)}
                     </select>
-                  </div>
-                  <div>
-                    <label className="block text-xs text-gray-500 mb-0.5">Duration (min)</label>
-                    <input type="number" value={fpData.duration_min} onChange={e => setFpData(p => ({ ...p, duration_min: e.target.value }))} className="w-full border border-gray-300 rounded px-2 py-1 text-sm" min="0" />
-                  </div>
-                  <div>
-                    <label className="block text-xs text-gray-500 mb-0.5">Contacted By *</label>
-                    <input type="text" value={fpData.contacted_by} onChange={e => setFpData(p => ({ ...p, contacted_by: e.target.value }))} className="w-full border border-gray-300 rounded px-2 py-1 text-sm" />
-                  </div>
-                  <div>
-                    <label className="block text-xs text-gray-500 mb-0.5">Spoke With</label>
-                    <input type="text" value={fpData.spoke_with} onChange={e => setFpData(p => ({ ...p, spoke_with: e.target.value }))} className="w-full border border-gray-300 rounded px-2 py-1 text-sm" />
-                  </div>
-                  <div>
-                    <label className="block text-xs text-gray-500 mb-0.5">Status After *</label>
-                    <select value={fpData.status_after} onChange={e => setFpData(p => ({ ...p, status_after: e.target.value }))} className="w-full border border-gray-300 rounded px-2 py-1 text-sm">
+                  </FormField>
+                  <FormField icon="clock" label="Duration (min)" htmlFor="fu-duration" status={fs.duration_min}>
+                    <input id="fu-duration" type="number" min="0" value={fpData.duration_min} onChange={e => setFpData(p => ({ ...p, duration_min: e.target.value }))} className="fu-control" />
+                  </FormField>
+                  <FormField icon="user" label="Contacted By" htmlFor="fu-by" required status={fs.contacted_by}>
+                    <input id="fu-by" type="text" value={fpData.contacted_by} onChange={e => setFpData(p => ({ ...p, contacted_by: e.target.value }))} className="fu-control" />
+                  </FormField>
+                  <FormField icon="users" label="Spoke With" htmlFor="fu-spoke" status={fs.spoke_with}>
+                    <input id="fu-spoke" type="text" value={fpData.spoke_with} onChange={e => setFpData(p => ({ ...p, spoke_with: e.target.value }))} className="fu-control" />
+                  </FormField>
+                  <FormField icon="flag" label="Status After" htmlFor="fu-status" required status={fs.status_after}>
+                    <select id="fu-status" value={fpData.status_after} onChange={e => setFpData(p => ({ ...p, status_after: e.target.value, next_followup_at: CLOSED.has(e.target.value) ? '' : p.next_followup_at }))} className="fu-control">
                       <option value="">Select...</option>
                       {STATUSES.map(s => <option key={s}>{s}</option>)}
                     </select>
-                  </div>
+                  </FormField>
                 </div>
-                <div>
-                  <label className="block text-xs text-gray-500 mb-0.5">Customer Said {['Connected','Replied'].includes(fpData.call_result) ? '*' : ''}</label>
-                  <textarea value={fpData.customer_said} onChange={e => setFpData(p => ({ ...p, customer_said: e.target.value }))} rows={2} className="w-full border border-gray-300 rounded px-2 py-1 text-sm" />
-                </div>
-                <div>
-                  <label className="block text-xs text-gray-500 mb-0.5">Our Notes</label>
-                  <textarea value={fpData.our_notes} onChange={e => setFpData(p => ({ ...p, our_notes: e.target.value }))} rows={2} className="w-full border border-gray-300 rounded px-2 py-1 text-sm" />
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-xs text-gray-500 mb-0.5">Next Action</label>
-                    <input type="text" value={fpData.next_action} onChange={e => setFpData(p => ({ ...p, next_action: e.target.value }))} className="w-full border border-gray-300 rounded px-2 py-1 text-sm" />
-                  </div>
-                  <div>
-                    <label className="block text-xs text-gray-500 mb-0.5">Next Follow-up Date</label>
-                    <input type="datetime-local" value={fpData.next_followup_at} onChange={e => setFpData(p => ({ ...p, next_followup_at: e.target.value }))} className="w-full border border-gray-300 rounded px-2 py-1 text-sm" />
-                  </div>
+                <FormField icon="quote" label="Customer Said" htmlFor="fu-said" required={needSaid} status={fs.customer_said}>
+                  <textarea id="fu-said" rows={2} value={fpData.customer_said} onChange={e => setFpData(p => ({ ...p, customer_said: e.target.value }))} className="fu-control" />
+                </FormField>
+                <FormField icon="pencil" label="Our Notes" htmlFor="fu-notes" status={fs.our_notes}>
+                  <textarea id="fu-notes" rows={2} value={fpData.our_notes} onChange={e => setFpData(p => ({ ...p, our_notes: e.target.value }))} className="fu-control" />
+                </FormField>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <FormField icon="arrowRight" label="Next Action" htmlFor="fu-next-action" status={fs.next_action}>
+                    <input id="fu-next-action" type="text" value={fpData.next_action} onChange={e => setFpData(p => ({ ...p, next_action: e.target.value }))} className="fu-control" />
+                  </FormField>
+                  <FormField
+                    icon="calendar"
+                    label="Next Follow-up Date (optional)"
+                    htmlFor="fu-next"
+                    status={fs.next_followup_at}
+                    disabled={nextLocked}
+                    title={CLOSED.has(fpData.status_after)
+                      ? `No next follow-up for "${fpData.status_after}"`
+                      : !fpData.followup_at ? 'Fill in Date & Time first' : undefined}
+                  >
+                    <input
+                      id="fu-next"
+                      type="datetime-local"
+                      disabled={nextLocked}
+                      min={nowLocal()}
+                      value={fpData.next_followup_at}
+                      onChange={e => setFpData(p => ({ ...p, next_followup_at: e.target.value }))}
+                      className="fu-control"
+                    />
+                  </FormField>
                 </div>
                 {fpError && <div className="text-red-500 text-xs">{fpError}</div>}
-                <button onClick={submitFollowup} disabled={fpSaving} className="bg-blue-600 text-white px-4 py-2 rounded text-sm hover:bg-blue-700 disabled:opacity-50">
-                  {fpSaving ? 'Saving...' : 'Add Follow-up'}
-                </button>
+                <div className="flex justify-center pt-1">
+                  <button
+                    onClick={submitFollowup}
+                    disabled={fpSaving}
+                    className="brand-gradient px-12 py-2.5 rounded-full text-white text-sm font-extrabold uppercase tracking-[0.18em] shadow-md transition hover:shadow-lg hover:brightness-110 disabled:opacity-50"
+                    style={{ background: 'linear-gradient(90deg, #4E148C 0%, #02C3BD 100%)' }}
+                  >
+                    <span>{fpSaving ? 'Saving...' : 'Add Follow-up'}</span>
+                  </button>
+                </div>
               </div>
             )}
           </div>
@@ -474,7 +551,7 @@ export default function ContactDetail() {
                     <div className="grid grid-cols-2 gap-2">
                       <div>
                         <label className="block text-xs text-gray-500">Date & Time</label>
-                        <input type="datetime-local" defaultValue={f.followup_at?.slice(0,16)} onChange={e => setEditFpData(p => ({ ...p, followup_at: e.target.value }))} className="w-full border border-gray-300 rounded px-2 py-1 text-xs" />
+                        <input type="datetime-local" max={nowLocal()} defaultValue={f.followup_at?.slice(0,16)} onChange={e => setEditFpData(p => ({ ...p, followup_at: e.target.value }))} className="w-full border border-gray-300 rounded px-2 py-1 text-xs" />
                       </div>
                       <div>
                         <label className="block text-xs text-gray-500">Channel</label>
