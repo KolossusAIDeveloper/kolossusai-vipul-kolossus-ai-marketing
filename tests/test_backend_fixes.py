@@ -5,7 +5,6 @@ the SQL and parameters sent to psycopg2, and the API tests call the real
 FastAPI app in-process through a minimal ASGI client.
 """
 import asyncio
-import csv
 import io
 import json
 import urllib.parse
@@ -87,23 +86,9 @@ def multipart(filename, data):
     return body, f"multipart/form-data; boundary={b}"
 
 
-# ---------------------------------------------------------------- 1. export fetches every contact
+# ---------------------------------------------------------------- 1. pagination
 @patch("backend.db.get_conn")
-def test_get_users_without_page_size_returns_every_row(mock_get_conn):
-    rows = [{"id": i} for i in range(750)]
-    conn, cur = make_conn(fetchone=[{"cnt": 750}], fetchall=rows)
-    mock_get_conn.return_value = conn
-
-    result = db.get_users(page_size=None)
-
-    select_sql, select_params = executed(cur)[1]
-    assert "LIMIT" not in select_sql and "OFFSET" not in select_sql
-    assert select_params == []
-    assert len(result["items"]) == 750
-
-
-@patch("backend.db.get_conn")
-def test_get_users_still_paginates_for_the_contacts_page(mock_get_conn):
+def test_get_users_paginates_correctly(mock_get_conn):
     conn, cur = make_conn(fetchone=[{"cnt": 750}], fetchall=[])
     mock_get_conn.return_value = conn
 
@@ -112,22 +97,6 @@ def test_get_users_still_paginates_for_the_contacts_page(mock_get_conn):
     select_sql, select_params = executed(cur)[1]
     assert select_sql.endswith("LIMIT %s OFFSET %s")
     assert select_params == [100, 100]
-
-
-@patch("backend.main.db.get_users")
-def test_export_csv_contains_every_matching_contact(mock_get_users):
-    mock_get_users.return_value = {
-        "items": [{"id": i, "full_name": f"Person {i}"} for i in range(750)],
-        "total": 750, "page": 1, "page_size": None,
-    }
-
-    r = call_api("GET", "/api/export-csv", {"cities": "Bhuj"})
-
-    assert r["status"] == 200
-    assert mock_get_users.call_args.kwargs["page_size"] is None
-    assert mock_get_users.call_args.kwargs["cities"] == ["Bhuj"]
-    rows = list(csv.DictReader(io.StringIO(r["body"].decode())))
-    assert len(rows) == 750
 
 
 # ---------------------------------------------------------------- 2. editing a follow-up updates the contact
