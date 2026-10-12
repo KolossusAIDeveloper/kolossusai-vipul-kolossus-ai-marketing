@@ -152,8 +152,8 @@ export default function Contacts() {
   }
 
   function SortIcon({ col }: { col: string }) {
-    if (sortBy !== col) return <span className="ml-1 text-gray-300 text-xs">↕</span>
-    return <span className="ml-1 text-blue-600 text-xs">{sortDir === 'asc' ? '↑' : '↓'}</span>
+    if (sortBy !== col) return <span className="sort-ico">↕</span>
+    return <span className="sort-ico is-active">{sortDir === 'asc' ? '↑' : '↓'}</span>
   }
 
   function toggleStatus(s: string) {
@@ -186,69 +186,92 @@ export default function Contacts() {
   const start = total === 0 ? 0 : (page - 1) * pageSize + 1
   const end = Math.min(page * pageSize, total)
 
+  const activeFilterCount = [
+    selectedStatuses.length > 0, !!search, !!idSearch, !!nextFollowupFilter, !!lastFollowupFilter,
+    company_types.length > 0, sectors.length > 0, cities.length > 0, assignedTos.length > 0, priorities.length > 0,
+  ].filter(Boolean).length
+
+  const pageButtons = Array.from({ length: Math.min(7, totalPages) }, (_, i) => {
+    if (totalPages <= 7) return i + 1
+    if (page <= 4) return i + 1
+    if (page >= totalPages - 3) return totalPages - 6 + i
+    return page - 3 + i
+  })
+
   return (
     <div className="p-6 space-y-4">
       {/* Header */}
       <div className="flex items-center justify-between gap-4 flex-wrap">
-        <h1 className="text-2xl font-bold text-gray-800 whitespace-nowrap">
-          Contacts{' '}
-          <span className="text-gray-400 text-lg font-normal">
-            {loading ? '…' : total > 0 ? `${start}–${end} of ${total}` : '0 results'}
+        <div className="flex items-center gap-3">
+          <h1 className="text-2xl font-bold text-gray-800 whitespace-nowrap">Contacts</h1>
+          <span className="pipe-total">
+            {loading ? '…' : total > 0 ? `${start}–${end} of ${total.toLocaleString()}` : '0 results'}
           </span>
-        </h1>
+        </div>
+
         {/* Always-visible search bar */}
-        <div className="flex-1 min-w-[220px] max-w-lg">
+        <div className="search-box flex-1 min-w-[240px] max-w-lg">
+          <svg viewBox="0 0 24 24" className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="M21 21l-4.35-4.35M17 11a6 6 0 11-12 0 6 6 0 0112 0z" />
+          </svg>
           <input
             type="text"
             value={search}
             onChange={e => { setSearch(e.target.value); setPage(1) }}
-            placeholder="🔍  Search name, company, mobile, email…"
-            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-300"
+            placeholder="Search name, company, mobile, email…"
+            aria-label="Search contacts"
           />
+          {search && (
+            <button type="button" onClick={() => { setSearch(''); setPage(1) }} className="search-clear" aria-label="Clear search">✕</button>
+          )}
         </div>
+
         <div className="flex items-center gap-2">
           {hasActiveFilters && (
-            <button onClick={clearFilters} className="text-xs text-red-500 border border-red-300 px-3 py-1.5 rounded hover:bg-red-50">
-              ✕ Clear filters
-            </button>
+            <button onClick={clearFilters} className="ghost-btn">✕ Clear filters</button>
           )}
           <button
             onClick={handleExport}
             disabled={exporting || total === 0}
             title="Download the contacts matching the current filters as CSV"
-            className="border border-gray-300 text-gray-700 px-3 py-1.5 rounded text-sm whitespace-nowrap hover:bg-gray-50 disabled:opacity-50"
+            className="btn-gold inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-semibold whitespace-nowrap disabled:opacity-50"
           >
-            {exporting ? 'Exporting…' : '⬇ Export CSV'}
+            <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+            </svg>
+            {exporting ? 'Exporting…' : 'Export CSV'}
           </button>
           <button
             onClick={() => setShowFilters(f => !f)}
-            className={`border px-3 py-1.5 rounded text-sm whitespace-nowrap ${showFilters ? 'bg-blue-50 border-blue-300 text-blue-700' : 'border-gray-300 text-gray-700 hover:bg-gray-50'}`}
+            aria-pressed={showFilters}
+            className="btn-brown inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-semibold whitespace-nowrap"
           >
-            {showFilters ? '✕ Hide Filters' : '☰ Filters'}
-            {hasActiveFilters && !showFilters && <span className="ml-1 bg-blue-600 text-white rounded-full px-1.5 py-0.5 text-xs">●</span>}
+            <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d={showFilters ? 'M6 18L18 6M6 6l12 12' : 'M3 4h18l-7 8v6l-4 2v-8L3 4z'} />
+            </svg>
+            {showFilters ? 'Hide Filters' : 'Filters'}
+            {activeFilterCount > 0 && !showFilters && <span className="filter-count">{activeFilterCount}</span>}
           </button>
         </div>
       </div>
 
-      {/* Active filter chips */}
+      {/* Active "had activity" filter explanation */}
       {lastFollowupFilter && (
-        <div className="flex flex-col gap-1">
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-gray-500">Active filter:</span>
-            <span className="inline-flex items-center gap-1 bg-indigo-100 text-indigo-700 text-xs font-semibold px-2 py-0.5 rounded-full">
+        <div className="info-note">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="info-chip">
               📞 Had activity: {lastFollowupFilter}
-              <button onClick={() => setLastFollowupFilter('')} className="ml-1 hover:text-indigo-900">✕</button>
+              <button onClick={() => setLastFollowupFilter('')} aria-label="Remove filter">✕</button>
             </span>
           </div>
-          <div className="bg-indigo-50 border border-indigo-200 rounded-lg px-3 py-2 text-xs text-indigo-700">
-            <strong>ℹ️ Note:</strong> This shows contacts where <em>any follow-up was logged</em> {lastFollowupFilter === 'This week' ? 'this week (Mon–today)' : lastFollowupFilter.toLowerCase()}.
-            Their <strong>current status</strong> may be anything (Interested, Follow-up Scheduled, etc.) — it's not limited to "Contacted".
-            To filter by status, use the coloured pills below.
-          </div>
+          <p className="mt-1.5">
+            Shows contacts where <em>any follow-up was logged</em> {lastFollowupFilter === 'This week' ? 'this week (Mon–today)' : lastFollowupFilter.toLowerCase()}.
+            Their current status may be anything — to filter by status, use the pills below.
+          </p>
         </div>
       )}
 
-      {/* Status Pills — counts are global totals, not filtered */}
+      {/* Status pills — counts are global totals, not filtered */}
       <div className="flex flex-wrap gap-2">
         {STATUSES.map(s => {
           const selected = selectedStatuses.includes(s)
@@ -258,52 +281,49 @@ export default function Contacts() {
               key={s}
               onClick={() => toggleStatus(s)}
               title={`${count} total contacts with status "${s}"`}
+              aria-pressed={selected}
               style={selected
-                ? { backgroundColor: STATUS_COLORS[s], color: '#fff', border: `2px solid ${STATUS_COLORS[s]}` }
-                : { backgroundColor: 'var(--pill-bg)', color: 'var(--pill-text)', border: `2px solid ${STATUS_COLORS[s]}` }
+                ? { backgroundColor: STATUS_COLORS[s], color: '#fff', borderColor: STATUS_COLORS[s] }
+                : { borderColor: STATUS_COLORS[s] }
               }
-              className="status-badge px-3 py-1 rounded-full text-xs font-semibold transition-all hover:opacity-90"
+              className={`status-pill status-badge${selected ? ' is-on' : ''}`}
             >
-              <span style={!selected ? { color: STATUS_COLORS[s] } : {}} className="mr-1">●</span>
+              <span className="pipe-dot" style={{ backgroundColor: selected ? '#fff' : STATUS_COLORS[s] }} />
               {s}
-              <span className={`ml-1.5 px-1.5 py-0.5 rounded-full text-xs ${selected ? 'bg-white bg-opacity-30 text-white' : 'bg-gray-200 text-gray-600'}`}>
-                {count}
-              </span>
+              <span className="pill-count">{count}</span>
             </button>
           )
         })}
         {selectedStatuses.length > 0 && (
-          <button onClick={() => setSelectedStatuses([])} className="px-3 py-1 rounded-full text-xs text-red-600 border border-red-300 hover:bg-red-50">
-            ✕ Clear status filter
-          </button>
+          <button onClick={() => setSelectedStatuses([])} className="ghost-btn">✕ Clear status filter</button>
         )}
       </div>
 
       <div className="flex gap-4">
-        {/* Filter Panel */}
+        {/* Filter panel */}
         {showFilters && (
-          <div className="w-64 flex-shrink-0 bg-white rounded-xl shadow p-4 space-y-4 self-start">
-            <p className="text-xs font-bold text-gray-700 uppercase tracking-wide">Filters</p>
+          <div className="filter-panel w-64 flex-shrink-0 self-start">
+            <div className="sum-label">Filters</div>
 
-            {/* ID Search */}
             <div>
-              <label className="block text-xs font-semibold text-gray-500 mb-1">Jump to Contact ID</label>
+              <label className="fp-label" htmlFor="fp-id">Jump to Contact ID</label>
               <input
+                id="fp-id"
                 type="number"
                 value={idSearch}
                 onChange={e => { setIdSearch(e.target.value); setPage(1) }}
                 placeholder="e.g. 42"
-                className="w-full border border-gray-300 rounded px-2 py-1 text-sm"
+                className="ctl"
               />
             </div>
 
-            {/* Next Follow-up */}
             <div>
-              <label className="block text-xs font-semibold text-gray-500 mb-1">Next Follow-up</label>
+              <label className="fp-label" htmlFor="fp-next">Next Follow-up</label>
               <select
+                id="fp-next"
                 value={nextFollowupFilter}
                 onChange={e => { setNextFollowupFilter(e.target.value); setPage(1) }}
-                className="w-full border border-gray-300 rounded px-2 py-1 text-sm"
+                className="ctl"
               >
                 <option value="">All</option>
                 <option>Overdue</option>
@@ -313,13 +333,13 @@ export default function Contacts() {
               </select>
             </div>
 
-            {/* Last Follow-up */}
             <div>
-              <label className="block text-xs font-semibold text-gray-500 mb-1">📞 Had Activity (any follow-up logged)</label>
+              <label className="fp-label" htmlFor="fp-last">Had Activity (any follow-up logged)</label>
               <select
+                id="fp-last"
                 value={lastFollowupFilter}
                 onChange={e => { setLastFollowupFilter(e.target.value); setPage(1) }}
-                className="w-full border border-gray-300 rounded px-2 py-1 text-sm"
+                className="ctl"
               >
                 <option value="">All time</option>
                 <option value="Today">Today</option>
@@ -328,7 +348,6 @@ export default function Contacts() {
               </select>
             </div>
 
-            {/* Multi-select filters */}
             {[
               { label: 'Company Type', opts: filterOptions.company_type, val: company_types, set: setCompanyTypes },
               { label: 'Sector', opts: filterOptions.sector, val: sectors, set: setSectors },
@@ -337,11 +356,11 @@ export default function Contacts() {
               { label: 'Priority', opts: filterOptions.priority, val: priorities, set: setPriorities },
             ].map(({ label, opts, val, set }) => (
               <div key={label}>
-                <label className="block text-xs font-semibold text-gray-500 mb-1">{label}</label>
-                <div className="space-y-1 max-h-32 overflow-y-auto">
+                <div className="fp-label">{label}{val.length > 0 && <span className="fp-badge">{val.length}</span>}</div>
+                <div className="fp-options">
                   {opts.length === 0 && <p className="text-xs text-gray-400 italic">No options</p>}
                   {opts.map(o => (
-                    <label key={o} className="flex items-center gap-1.5 text-xs cursor-pointer hover:bg-gray-50 rounded px-1">
+                    <label key={o} className="fp-option">
                       <input type="checkbox" checked={val.includes(o)} onChange={() => { toggleMulti(o, val, set); setPage(1) }} />
                       {o}
                     </label>
@@ -350,54 +369,55 @@ export default function Contacts() {
               </div>
             ))}
 
-            <button onClick={clearFilters} className="w-full text-xs text-red-500 border border-red-200 rounded py-1 hover:bg-red-50">
-              Clear all filters
-            </button>
+            <button onClick={clearFilters} className="ghost-btn w-full justify-center">Clear all filters</button>
           </div>
         )}
 
-        {/* Table + Pagination */}
-        <div className="flex-1 min-w-0 space-y-2">
-          {/* Page size + pagination controls (top) */}
-          <div className="flex items-center justify-between bg-white rounded-lg px-4 py-2 shadow-sm flex-wrap gap-2">
-            <div className="flex items-center gap-2 text-sm text-gray-600">
-              <span>Rows per page:</span>
+        {/* Table + pagination */}
+        <div className="flex-1 min-w-0 space-y-3">
+          {/* Page size + pagination (top) */}
+          <div className="table-bar">
+            <label className="flex items-center gap-2 text-sm text-gray-600">
+              Rows per page
               <select
                 value={pageSize}
                 onChange={e => { setPageSize(Number(e.target.value)); setPage(1) }}
-                className="border border-gray-300 rounded px-2 py-0.5 text-sm"
+                className="ctl ctl-sm"
               >
                 {PAGE_SIZES.map(n => <option key={n} value={n}>{n}</option>)}
               </select>
-            </div>
+            </label>
             <div className="flex items-center gap-2 text-sm text-gray-600">
               <span className="text-gray-500">{loading ? 'Loading…' : total === 0 ? '0 results' : `${start}–${end} of ${total}`}</span>
-              <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page <= 1}
-                className="px-2 py-1 rounded border border-gray-300 disabled:opacity-40 hover:bg-gray-50 text-sm">‹</button>
-              <span className="font-medium text-xs">Page {page} / {totalPages}</span>
-              <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page >= totalPages}
-                className="px-2 py-1 rounded border border-gray-300 disabled:opacity-40 hover:bg-gray-50 text-sm">›</button>
+              <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page <= 1} className="page-btn" aria-label="Previous page">‹</button>
+              <span className="font-semibold text-xs whitespace-nowrap">Page {page} / {totalPages}</span>
+              <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page >= totalPages} className="page-btn" aria-label="Next page">›</button>
             </div>
           </div>
 
           {/* Table */}
-          <div className="bg-white rounded-xl shadow overflow-auto">
+          <div className="table-card">
             {loading ? (
-              <div className="p-12 text-center text-gray-400">
-                <div className="inline-block animate-spin text-3xl mb-2">⟳</div>
-                <div>Loading contacts…</div>
+              <div className="p-12 flex flex-col items-center gap-3 text-gray-500">
+                <div className="drop-spinner" />
+                <div className="text-sm">Loading contacts…</div>
               </div>
             ) : contacts.length === 0 ? (
-              <div className="p-12 text-center text-gray-400">
-                <div className="text-4xl mb-2">🔍</div>
-                <div className="font-medium">No contacts found</div>
+              <div className="p-12 flex flex-col items-center gap-2 text-center">
+                <div className="drop-icon">
+                  <svg viewBox="0 0 24 24" className="w-7 h-7" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <path d="M21 21l-4.35-4.35M17 11a6 6 0 11-12 0 6 6 0 0112 0z" />
+                  </svg>
+                </div>
+                <div className="font-semibold text-gray-700">No contacts found</div>
+                <div className="text-sm text-gray-500">Try a different search or fewer filters.</div>
                 {hasActiveFilters && (
-                  <button onClick={clearFilters} className="mt-3 text-blue-600 text-sm underline">Clear all filters</button>
+                  <button onClick={clearFilters} className="edit-btn mt-2">Clear all filters</button>
                 )}
               </div>
             ) : (
-              <table className="w-full text-sm">
-                <thead className="bg-gray-50 sticky top-0 z-10">
+              <table className="contacts-table w-full text-sm">
+                <thead>
                   <tr>
                     {[
                       { label: '#ID', col: 'id' },
@@ -416,61 +436,50 @@ export default function Contacts() {
                       { label: '', col: null },
                     ].map(({ label, col }) => (
                       col ? (
-                        <th
-                          key={label}
-                          onClick={() => handleSort(col)}
-                          className="px-3 py-2.5 text-left text-xs font-semibold text-gray-600 whitespace-nowrap border-b border-gray-200 cursor-pointer select-none hover:bg-gray-100 hover:text-blue-700"
-                        >
+                        <th key={label} onClick={() => handleSort(col)} className={`is-sortable${sortBy === col ? ' is-sorted' : ''}`}>
                           {label}<SortIcon col={col} />
                         </th>
                       ) : (
-                        <th key={label} className="px-3 py-2.5 text-left text-xs font-semibold text-gray-600 whitespace-nowrap border-b border-gray-200">{label}</th>
+                        <th key={label || 'actions'}>{label}</th>
                       )
                     ))}
                   </tr>
                 </thead>
                 <tbody>
-                  {contacts.map((c, i) => (
-                    <tr
-                      key={c.id}
-                      onClick={() => navigate(`/contacts/${c.id}`)}
-                      className={`border-t border-gray-100 hover:bg-blue-50 cursor-pointer transition-colors group ${i % 2 === 1 ? 'bg-gray-50/50' : 'bg-white'}`}
-                    >
-                      {/* Unique sequential ID */}
-                      <td className="px-3 py-2.5 text-gray-400 text-xs font-mono font-bold">#{c.id}</td>
-                      <td className="px-3 py-2.5 font-medium text-gray-900 whitespace-nowrap">
+                  {contacts.map(c => (
+                    <tr key={c.id} onClick={() => navigate(`/contacts/${c.id}`)} className="group">
+                      <td><span className="id-chip">#{c.id}</span></td>
+                      <td className="font-semibold text-gray-900 whitespace-nowrap">
                         {c.full_name}
                         {c.possible_duplicate_of && (
                           <span className="ml-1 text-yellow-500 text-xs" title={`Possible duplicate of #${c.possible_duplicate_of}`}>⚠</span>
                         )}
                       </td>
-                      <td className="px-3 py-2.5 text-gray-600 max-w-[120px] truncate">{c.designation ?? ''}</td>
-                      <td className="px-3 py-2.5 text-gray-600 whitespace-nowrap max-w-[150px] truncate">{c.company ?? ''}</td>
-                      <td className="px-3 py-2.5 text-gray-600 font-mono text-xs">{c.mobile ?? ''}</td>
-                      <td className="px-3 py-2.5 text-gray-600 max-w-[120px] truncate">{c.sector ?? ''}</td>
-                      <td className="px-3 py-2.5 text-gray-600">{c.city ?? ''}</td>
-                      <td className="px-3 py-2.5">
-                        <StatusBadge status={c.current_status} />
-                      </td>
-                      <td className="px-3 py-2.5 text-gray-500 whitespace-nowrap text-xs">{fmtDate(c.last_followup_at)}</td>
-                      <td className="px-3 py-2.5 text-gray-600 max-w-[160px] truncate text-xs" title={c.last_outcome ?? ''}>{c.last_outcome ?? ''}</td>
-                      <td className="px-3 py-2.5 whitespace-nowrap">
+                      <td className="text-gray-600 max-w-[120px] truncate">{c.designation ?? ''}</td>
+                      <td className="text-gray-600 whitespace-nowrap max-w-[150px] truncate">{c.company ?? ''}</td>
+                      <td className="text-gray-600 font-mono text-xs">{c.mobile ?? ''}</td>
+                      <td className="text-gray-600 max-w-[120px] truncate">{c.sector ?? ''}</td>
+                      <td className="text-gray-600">{c.city ?? ''}</td>
+                      <td><StatusBadge status={c.current_status} /></td>
+                      <td className="text-gray-500 whitespace-nowrap text-xs">{fmtDate(c.last_followup_at)}</td>
+                      <td className="text-gray-600 max-w-[160px] truncate text-xs" title={c.last_outcome ?? ''}>{c.last_outcome ?? ''}</td>
+                      <td className="whitespace-nowrap">
                         {isOverdue(c.next_followup_at, c.current_status)
-                          ? <span className="text-red-600 font-medium text-xs">🔴 {fmtDate(c.next_followup_at)}</span>
+                          ? <span className="due-pill is-overdue text-xs">{fmtDate(c.next_followup_at)}</span>
                           : <span className="text-gray-500 text-xs">{fmtDate(c.next_followup_at)}</span>
                         }
                       </td>
-                      <td className="px-3 py-2.5 text-center">
+                      <td className="text-center">
                         {c.followup_count > 0
-                          ? <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-blue-100 text-blue-700 text-xs font-bold">{c.followup_count}</span>
+                          ? <span className="calls-chip">{c.followup_count}</span>
                           : <span className="text-gray-300 text-xs">—</span>
                         }
                       </td>
-                      <td className="px-3 py-2.5 text-gray-600 text-xs">{c.assigned_to ?? ''}</td>
-                      <td className="px-3 py-2.5">
+                      <td className="text-gray-600 text-xs">{c.assigned_to ?? ''}</td>
+                      <td>
                         <button
                           onClick={e => { e.stopPropagation(); navigate(`/contacts/${c.id}`) }}
-                          className="opacity-0 group-hover:opacity-100 transition-opacity bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold px-3 py-1 rounded-lg whitespace-nowrap shadow"
+                          className="edit-btn row-view opacity-0 group-hover:opacity-100"
                         >
                           View →
                         </button>
@@ -484,25 +493,14 @@ export default function Contacts() {
 
           {/* Bottom pagination */}
           {totalPages > 1 && (
-            <div className="flex items-center justify-center gap-1 bg-white rounded-lg px-4 py-2 shadow-sm flex-wrap">
-              <button onClick={() => setPage(1)} disabled={page <= 1} className="px-2 py-1 text-xs rounded border border-gray-300 disabled:opacity-40 hover:bg-gray-50">«</button>
-              <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page <= 1} className="px-3 py-1 text-sm rounded border border-gray-300 disabled:opacity-40 hover:bg-gray-50">‹ Prev</button>
-              {Array.from({ length: Math.min(7, totalPages) }, (_, i) => {
-                let p: number
-                if (totalPages <= 7) p = i + 1
-                else if (page <= 4) p = i + 1
-                else if (page >= totalPages - 3) p = totalPages - 6 + i
-                else p = page - 3 + i
-                return (
-                  <button
-                    key={p}
-                    onClick={() => setPage(p)}
-                    className={`px-3 py-1 text-sm rounded border ${p === page ? 'bg-blue-600 text-white border-blue-600' : 'border-gray-300 hover:bg-gray-50'}`}
-                  >{p}</button>
-                )
-              })}
-              <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page >= totalPages} className="px-3 py-1 text-sm rounded border border-gray-300 disabled:opacity-40 hover:bg-gray-50">Next ›</button>
-              <button onClick={() => setPage(totalPages)} disabled={page >= totalPages} className="px-2 py-1 text-xs rounded border border-gray-300 disabled:opacity-40 hover:bg-gray-50">»</button>
+            <div className="table-bar justify-center">
+              <button onClick={() => setPage(1)} disabled={page <= 1} className="page-btn" aria-label="First page">«</button>
+              <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page <= 1} className="page-btn">‹ Prev</button>
+              {pageButtons.map(p => (
+                <button key={p} onClick={() => setPage(p)} className={`page-btn${p === page ? ' is-current' : ''}`} aria-current={p === page ? 'page' : undefined}>{p}</button>
+              ))}
+              <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page >= totalPages} className="page-btn">Next ›</button>
+              <button onClick={() => setPage(totalPages)} disabled={page >= totalPages} className="page-btn" aria-label="Last page">»</button>
             </div>
           )}
         </div>

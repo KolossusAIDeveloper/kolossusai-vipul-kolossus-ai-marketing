@@ -19,7 +19,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     <div className="app-bg flex h-screen bg-gray-100">
       {/* Sidebar */}
       <aside
-        className="brand-gradient textured w-56 text-white flex flex-col flex-shrink-0"
+        className="sidebar-panel brand-gradient textured w-56 text-white flex flex-col flex-shrink-0"
         style={{ background: 'linear-gradient(160deg, #4E148C 0%, #02C3BD 100%)', textShadow: '0 1px 2px rgb(0 0 0 / 0.2)' }}
       >
         <div className="brand-header p-4 flex items-center gap-3">

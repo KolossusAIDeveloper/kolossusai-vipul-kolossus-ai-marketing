@@ -2,7 +2,8 @@ import React, { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { getContact, updateContact, getFollowups, addFollowup, updateFollowup, deleteFollowup } from '../api'
 import StatusBadge from '../components/StatusBadge'
-import FormField, { FieldStatus } from '../components/FormField'
+import FormField, { FieldIcon, FieldStatus } from '../components/FormField'
+import ProfileTile from '../components/ProfileTile'
 
 const STATUSES = [
   "New","Attempted - No Answer","Contacted","Interested","Follow-up Scheduled",
@@ -49,6 +50,35 @@ function fmtDateTime(val: string | null | undefined) {
     h = h % 12 || 12
     return `${day}-${mon}-${yr} ${h}:${m} ${ampm}`
   } catch { return val ?? '' }
+}
+
+// Whole calendar days from today to the given date (negative = past)
+function daysFromToday(val: string) {
+  const d = new Date(val); d.setHours(0, 0, 0, 0)
+  const t = new Date(); t.setHours(0, 0, 0, 0)
+  return Math.round((d.getTime() - t.getTime()) / 86400000)
+}
+
+// e.g. "09 Oct 2026, 2:30 PM"
+function fmtNice(val: string) {
+  const d = new Date(val)
+  return d.toLocaleString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true })
+    .replace(' am', ' AM').replace(' pm', ' PM').replace('Sept', 'Sep')
+}
+
+function lastContactText(val: string) {
+  const n = -daysFromToday(val)
+  return n <= 0 ? 'Today' : n === 1 ? 'Yesterday' : `${n} days ago`
+}
+
+// Label + colour for the next follow-up pill
+function nextDue(val: string | null | undefined, status: string): { text: string; tone: string } {
+  if (CLOSED.has(status)) return { text: 'Closed', tone: 'none' }
+  if (!val) return { text: 'Not scheduled', tone: 'none' }
+  const n = daysFromToday(val)
+  if (n < 0) return { text: `Overdue by ${-n} day${n === -1 ? '' : 's'}`, tone: 'overdue' }
+  if (n === 0) return { text: 'Due today', tone: 'today' }
+  return { text: n === 1 ? 'Tomorrow' : `In ${n} days`, tone: 'upcoming' }
 }
 
 const CHANNEL_ICONS: Record<string, string> = {
@@ -282,7 +312,7 @@ export default function ContactDetail() {
     <div className="p-6 space-y-6">
       {/* Header */}
       <div
-        className="brand-gradient textured flex items-center gap-4 rounded-xl px-5 py-4 shadow text-white"
+        className="name-bar brand-gradient textured flex items-center gap-4 rounded-xl px-5 py-4 shadow text-white"
         style={{ background: 'linear-gradient(90deg, #4E148C 0%, #02C3BD 100%)' }}
       >
         <button
@@ -311,133 +341,164 @@ export default function ContactDetail() {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Profile Card */}
-        <div className="bg-white rounded-xl shadow p-5 space-y-3">
+        <div className={`${editMode ? 'bg-white' : 'bg-gray-50'} rounded-xl shadow p-5 space-y-3`}>
           <div className="flex items-center justify-between">
-            <h2 className="font-semibold text-gray-700">Profile</h2>
+            <h2 className="font-bold text-gray-900">Profile</h2>
             <button
               onClick={() => { setEditMode(!editMode); setEditData({}) }}
-              className="text-sm text-blue-600 hover:underline"
+              className={`edit-btn${editMode ? ' is-cancel' : ''}`}
             >
+              <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d={editMode
+                  ? 'M6 18L18 6M6 6l12 12'
+                  : 'M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z'} />
+              </svg>
               {editMode ? 'Cancel' : 'Edit Details'}
             </button>
           </div>
 
           {editMode ? (
-            <div className="space-y-3 text-sm">
+            <div className="pf-edit space-y-3 text-sm">
               {([
-                ['full_name','Full Name','text'],
-                ['designation','Designation','text'],
-                ['company','Company','text'],
-                ['mobile','Mobile','text'],
-                ['email','Email','email'],
-                ['sector','Sector','text'],
-                ['company_type','Company Type','text'],
-                ['address','Address','text'],
-                ['city','City','text'],
-                ['assigned_to','Assigned To','text'],
-                ['notes','Notes','text'],
-              ] as [string, string, string][]).map(([field, label, type]) => (
-                <div key={field}>
-                  <label className="block text-xs text-gray-500 mb-0.5">{label}</label>
+                ['full_name','Full Name','text','user'],
+                ['designation','Designation','text','briefcase'],
+                ['company','Company','text','building'],
+                ['mobile','Mobile','text','phone'],
+                ['email','Email','email','mail'],
+                ['sector','Sector','text','grid'],
+                ['company_type','Company Type','text','tag'],
+                ['address','Address','text','home'],
+                ['city','City','text','pin'],
+                ['assigned_to','Assigned To','text','userCheck'],
+                ['notes','Notes','text','pencil'],
+              ] as [string, string, string, FieldIcon][]).map(([field, label, type, icon]) => (
+                <FormField key={field} icon={icon} label={label} htmlFor={`pf-${field}`}>
                   <input
+                    id={`pf-${field}`}
                     type={type}
                     defaultValue={(contact as unknown as Record<string, unknown>)[field] as string ?? ''}
                     onChange={e => setEditData(prev => ({ ...prev, [field]: e.target.value }))}
-                    className="w-full border border-gray-300 rounded px-2 py-1 text-sm"
+                    className="fu-control"
                   />
-                </div>
+                </FormField>
               ))}
-              <div>
-                <label className="block text-xs text-gray-500 mb-0.5">Priority</label>
+              <FormField icon="flag" label="Priority" htmlFor="pf-priority">
                 <select
+                  id="pf-priority"
                   defaultValue={contact.priority ?? 'Medium'}
                   onChange={e => setEditData(prev => ({ ...prev, priority: e.target.value }))}
-                  className="w-full border border-gray-300 rounded px-2 py-1 text-sm"
+                  className="fu-control"
                 >
                   {['High','Medium','Low'].map(p => <option key={p}>{p}</option>)}
                 </select>
-              </div>
-              <div>
-                <label className="block text-xs text-gray-500 mb-0.5">Interest Level</label>
+              </FormField>
+              <FormField icon="fire" label="Interest Level" htmlFor="pf-interest">
                 <select
+                  id="pf-interest"
                   defaultValue={contact.interest_level ?? ''}
                   onChange={e => setEditData(prev => ({ ...prev, interest_level: e.target.value || null } as Partial<Contact>))}
-                  className="w-full border border-gray-300 rounded px-2 py-1 text-sm"
+                  className="fu-control"
                 >
                   <option value="">None</option>
                   {['Hot','Warm','Cold'].map(p => <option key={p}>{p}</option>)}
                 </select>
+              </FormField>
+              <div className="flex justify-center pt-1">
+                <button
+                  onClick={saveEdit}
+                  disabled={saving}
+                  className="fu-submit brand-gradient textured px-12 py-2.5 rounded-full text-white text-sm shadow-md transition hover:shadow-lg hover:brightness-110 disabled:opacity-50"
+                  style={{ background: 'linear-gradient(90deg, #4E148C 0%, #02C3BD 100%)' }}
+                >
+                  <span>{saving ? 'Saving...' : 'Save Changes'}</span>
+                </button>
               </div>
-              <button
-                onClick={saveEdit}
-                disabled={saving}
-                className="bg-blue-600 text-white px-4 py-1.5 rounded text-sm hover:bg-blue-700 disabled:opacity-50"
-              >
-                {saving ? 'Saving...' : 'Save Changes'}
-              </button>
             </div>
           ) : (
-            <dl className="text-sm space-y-2">
-              {([
-                ['Sr #', contact.sr_no],
-                ['Mobile', contact.mobile ? (
-                  <span className="flex items-center gap-2">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <ProfileTile label="Mobile" icon="phone">
+                {contact.mobile ? (
+                  <span className="flex items-center gap-2 flex-wrap">
                     <a href={`tel:${contact.mobile}`} className="text-blue-600 hover:underline">{contact.mobile}</a>
                     <a href={`https://wa.me/91${contact.mobile?.replace(/\D/g,'')}`} target="_blank" rel="noreferrer" className="text-green-600 text-xs hover:underline">WhatsApp</a>
                   </span>
-                ) : '—'],
-                ['Email', contact.email ? <a href={`mailto:${contact.email}`} className="text-blue-600 hover:underline">{contact.email}</a> : '—'],
-                ['Designation', contact.designation ?? '—'],
-                ['Company', contact.company ?? '—'],
-                ['Company Type', contact.company_type ?? '—'],
-                ['Sector', contact.sector ?? '—'],
-                ['MSME Type', contact.msme_type ?? '—'],
-                ['Gender', contact.gender ?? '—'],
-                ['Social Category', contact.social_category ?? '—'],
-                ['City', contact.city ?? '—'],
-                ['Address', contact.address ?? '—'],
-                ['Lead Source', contact.lead_source ?? '—'],
-                ['Priority', contact.priority ?? '—'],
-                ['Interest Level', contact.interest_level ?? '—'],
-                ['Assigned To', contact.assigned_to ?? '—'],
-              ] as [string, React.ReactNode][]).map(([label, value]) => (
-                <div key={label as string} className="flex gap-2">
-                  <dt className="text-gray-500 w-36 flex-shrink-0">{label}</dt>
-                  <dd className="text-gray-900">{value}</dd>
-                </div>
-              ))}
-              <div className="flex gap-2">
-                <dt className="text-gray-500 w-36 flex-shrink-0">Udyam/Aadhaar</dt>
-                <dd className="text-gray-900 flex items-center gap-2">
-                  {showAadhaar ? (contact.udyam_aadhaar ?? '—') : maskAadhaar(contact.udyam_aadhaar)}
+                ) : '—'}
+              </ProfileTile>
+              <ProfileTile label="Email" icon="mail">
+                {contact.email ? <a href={`mailto:${contact.email}`} className="text-blue-600 hover:underline">{contact.email}</a> : '—'}
+              </ProfileTile>
+              <ProfileTile label="Designation" icon="briefcase">{contact.designation ?? '—'}</ProfileTile>
+              <ProfileTile label="Company" icon="building">{contact.company ?? '—'}</ProfileTile>
+              <ProfileTile label="Company Type" icon="tag">{contact.company_type ?? '—'}</ProfileTile>
+              <ProfileTile label="Sector" icon="grid">{contact.sector ?? '—'}</ProfileTile>
+              <ProfileTile label="MSME Type" icon="chart">{contact.msme_type ?? '—'}</ProfileTile>
+              <ProfileTile label="Gender" icon="user">{contact.gender ?? '—'}</ProfileTile>
+              <ProfileTile label="Social Category" icon="users">{contact.social_category ?? '—'}</ProfileTile>
+              <ProfileTile label="City" icon="pin">{contact.city ?? '—'}</ProfileTile>
+              <ProfileTile label="Address" icon="home" wide>{contact.address ?? '—'}</ProfileTile>
+              <ProfileTile label="Priority" icon="flag">{contact.priority ?? '—'}</ProfileTile>
+              <ProfileTile label="Interest Level" icon="fire">{contact.interest_level ?? '—'}</ProfileTile>
+              <ProfileTile label="Assigned To" icon="userCheck">{contact.assigned_to ?? '—'}</ProfileTile>
+              <ProfileTile label="Udyam / Aadhaar" icon="idCard">
+                <span className="flex items-center gap-2 flex-wrap">
+                  {showAadhaar ? (contact.udyam_aadhaar ?? '—') : (maskAadhaar(contact.udyam_aadhaar) || '—')}
                   {contact.udyam_aadhaar && (
                     <button onClick={() => setShowAadhaar(s => !s)} className="text-xs text-blue-500 hover:underline">
                       {showAadhaar ? 'Hide' : 'Show'}
                     </button>
                   )}
-                </dd>
-              </div>
-              {contact.notes && (
-                <div className="flex gap-2">
-                  <dt className="text-gray-500 w-36 flex-shrink-0">Notes</dt>
-                  <dd className="text-gray-900">{contact.notes}</dd>
-                </div>
-              )}
-            </dl>
+                </span>
+              </ProfileTile>
+              <ProfileTile label="Lead Source" icon="link">{contact.lead_source ?? '—'}</ProfileTile>
+              <ProfileTile label="Sr #" icon="hash">{contact.sr_no ?? '—'}</ProfileTile>
+              {contact.notes && <ProfileTile label="Notes" icon="pencil" wide>{contact.notes}</ProfileTile>}
+            </div>
           )}
         </div>
 
         {/* Follow-up Summary + Add */}
         <div className="space-y-4">
-          <div className="bg-white rounded-xl shadow p-5 space-y-2 text-sm">
-            <h2 className="font-semibold text-gray-700 mb-2">Follow-up Summary</h2>
-            <div className="grid grid-cols-2 gap-2">
-              <div><span className="text-gray-500">Status</span><div><StatusBadge status={contact.current_status} /></div></div>
-              <div><span className="text-gray-500">Total Follow-ups</span><div className="font-bold text-lg">{contact.followup_count}</div></div>
-              <div><span className="text-gray-500">Last Follow-up</span><div>{fmtDate(contact.last_followup_at) || '—'}</div></div>
-              <div><span className="text-gray-500">Last Channel</span><div>{contact.last_channel ?? '—'}</div></div>
-              <div><span className="text-gray-500">Next Follow-up</span><div>{fmtDate(contact.next_followup_at) || '—'}</div></div>
-              <div><span className="text-gray-500">Last Outcome</span><div>{contact.last_outcome ?? '—'}</div></div>
+          <div className="bg-white rounded-xl shadow p-5 space-y-4 text-sm">
+            <div className="flex items-center justify-between gap-3">
+              <h2 className="font-bold text-gray-900">Follow-up Summary</h2>
+              <StatusBadge status={contact.current_status} />
+            </div>
+            {(() => {
+              const due = nextDue(contact.next_followup_at, contact.current_status)
+              return (
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div className="sum-stat">
+                    <div className="sum-label">Follow-ups</div>
+                    <div className="sum-big">{contact.followup_count}</div>
+                    <div className="sum-sub">{contact.followup_count === 1 ? 'interaction logged' : 'interactions logged'}</div>
+                  </div>
+                  <div className="sum-stat">
+                    <div className="sum-label">Last contact</div>
+                    {contact.last_followup_at ? (
+                      <>
+                        <div className="sum-value">{lastContactText(contact.last_followup_at)}</div>
+                        <div className="sum-sub">{fmtNice(contact.last_followup_at)}</div>
+                        {contact.last_channel && (
+                          <div className="sum-sub">{CHANNEL_ICONS[contact.last_channel] ?? '📋'} {contact.last_channel}</div>
+                        )}
+                      </>
+                    ) : (
+                      <div className="sum-value text-gray-400">Never contacted</div>
+                    )}
+                  </div>
+                  <div className="sum-stat">
+                    <div className="sum-label">Next follow-up</div>
+                    <div><span className={`due-pill is-${due.tone}`}>{due.text}</span></div>
+                    {contact.next_followup_at && !CLOSED.has(contact.current_status) && (
+                      <div className="sum-sub">{fmtNice(contact.next_followup_at)}</div>
+                    )}
+                  </div>
+                </div>
+              )
+            })()}
+            <div className="sum-outcome">
+              <div className="sum-label">Last outcome</div>
+              <div className="sum-quote">{contact.last_outcome ?? 'No outcome recorded yet'}</div>
             </div>
           </div>
 
@@ -525,7 +586,7 @@ export default function ContactDetail() {
                   <button
                     onClick={submitFollowup}
                     disabled={fpSaving}
-                    className="brand-gradient px-12 py-2.5 rounded-full text-white text-sm font-extrabold uppercase tracking-[0.18em] shadow-md transition hover:shadow-lg hover:brightness-110 disabled:opacity-50"
+                    className="fu-submit brand-gradient textured px-12 py-2.5 rounded-full text-white text-sm font-semibold shadow-md transition hover:shadow-lg hover:brightness-110 disabled:opacity-50"
                     style={{ background: 'linear-gradient(90deg, #4E148C 0%, #02C3BD 100%)' }}
                   >
                     <span>{fpSaving ? 'Saving...' : 'Add Follow-up'}</span>
@@ -539,90 +600,103 @@ export default function ContactDetail() {
 
       {/* Follow-up History */}
       <div className="bg-white rounded-xl shadow p-5">
-        <h2 className="font-semibold text-gray-700 mb-4">Follow-up History ({followups.length})</h2>
+        <h2 className="font-bold text-gray-900 mb-4">Follow-up History ({followups.length})</h2>
         {followups.length === 0 ? (
           <p className="text-gray-400 text-sm">No follow-ups yet</p>
         ) : (
-          <div className="space-y-4">
+          <div className="fh-list">
             {followups.map(f => (
-              <div key={f.id} className="border border-gray-200 rounded-lg p-4 space-y-2">
-                {editFollowupId === f.id ? (
-                  <div className="space-y-2 text-sm">
-                    <div className="grid grid-cols-2 gap-2">
-                      <div>
-                        <label className="block text-xs text-gray-500">Date & Time</label>
-                        <input type="datetime-local" max={nowLocal()} defaultValue={f.followup_at?.slice(0,16)} onChange={e => setEditFpData(p => ({ ...p, followup_at: e.target.value }))} className="w-full border border-gray-300 rounded px-2 py-1 text-xs" />
+              <div key={f.id} className="fh-item">
+                <div className="fh-dot" aria-hidden="true">{CHANNEL_ICONS[f.channel] ?? '📋'}</div>
+                <div className="fh-card">
+                  {editFollowupId === f.id ? (
+                    <div className="pf-edit space-y-3 text-sm">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <FormField icon="calendar" label="Date & Time" htmlFor={`fh-at-${f.id}`}>
+                          <input id={`fh-at-${f.id}`} type="datetime-local" max={nowLocal()} defaultValue={f.followup_at?.slice(0,16)} onChange={e => setEditFpData(p => ({ ...p, followup_at: e.target.value }))} className="fu-control" />
+                        </FormField>
+                        <FormField icon="chat" label="Channel" htmlFor={`fh-channel-${f.id}`}>
+                          <select id={`fh-channel-${f.id}`} defaultValue={f.channel} onChange={e => setEditFpData(p => ({ ...p, channel: e.target.value }))} className="fu-control">
+                            {CHANNELS.map(c => <option key={c}>{c}</option>)}
+                          </select>
+                        </FormField>
+                        <FormField icon="phone" label="Call Result" htmlFor={`fh-result-${f.id}`}>
+                          <select id={`fh-result-${f.id}`} defaultValue={f.call_result ?? ''} onChange={e => setEditFpData(p => ({ ...p, call_result: e.target.value }))} className="fu-control">
+                            <option value="">None</option>
+                            {CALL_RESULTS.map(r => <option key={r}>{r}</option>)}
+                          </select>
+                        </FormField>
+                        <FormField icon="user" label="Contacted By" htmlFor={`fh-by-${f.id}`}>
+                          <input id={`fh-by-${f.id}`} defaultValue={f.contacted_by} onChange={e => setEditFpData(p => ({ ...p, contacted_by: e.target.value }))} className="fu-control" />
+                        </FormField>
                       </div>
-                      <div>
-                        <label className="block text-xs text-gray-500">Channel</label>
-                        <select defaultValue={f.channel} onChange={e => setEditFpData(p => ({ ...p, channel: e.target.value }))} className="w-full border border-gray-300 rounded px-2 py-1 text-xs">
-                          {CHANNELS.map(c => <option key={c}>{c}</option>)}
-                        </select>
-                      </div>
-                      <div>
-                        <label className="block text-xs text-gray-500">Call Result</label>
-                        <select defaultValue={f.call_result ?? ''} onChange={e => setEditFpData(p => ({ ...p, call_result: e.target.value }))} className="w-full border border-gray-300 rounded px-2 py-1 text-xs">
-                          <option value="">None</option>
-                          {CALL_RESULTS.map(r => <option key={r}>{r}</option>)}
-                        </select>
-                      </div>
-                      <div>
-                        <label className="block text-xs text-gray-500">Contacted By</label>
-                        <input defaultValue={f.contacted_by} onChange={e => setEditFpData(p => ({ ...p, contacted_by: e.target.value }))} className="w-full border border-gray-300 rounded px-2 py-1 text-xs" />
-                      </div>
-                    </div>
-                    <div>
-                      <label className="block text-xs text-gray-500">Customer Said</label>
-                      <textarea defaultValue={f.customer_said ?? ''} onChange={e => setEditFpData(p => ({ ...p, customer_said: e.target.value }))} rows={2} className="w-full border border-gray-300 rounded px-2 py-1 text-xs" />
-                    </div>
-                    <div>
-                      <label className="block text-xs text-gray-500">Our Notes</label>
-                      <textarea defaultValue={f.our_notes ?? ''} onChange={e => setEditFpData(p => ({ ...p, our_notes: e.target.value }))} rows={2} className="w-full border border-gray-300 rounded px-2 py-1 text-xs" />
-                    </div>
-                    <div className="flex gap-2">
-                      <button onClick={() => saveEditFollowup(f.id)} className="bg-blue-600 text-white px-3 py-1 rounded text-xs hover:bg-blue-700">Save</button>
-                      <button onClick={() => setEditFollowupId(null)} className="text-gray-500 text-xs hover:underline">Cancel</button>
-                    </div>
-                  </div>
-                ) : (
-                  <>
-                    <div className="flex items-center justify-between flex-wrap gap-2">
-                      <div className="flex items-center gap-2 text-sm text-gray-600">
-                        <span>{CHANNEL_ICONS[f.channel] ?? '📋'} <strong>{f.channel}</strong></span>
-                        <span className="text-gray-400">·</span>
-                        <span>{fmtDateTime(f.followup_at)}</span>
-                        <span className="text-gray-400">·</span>
-                        <span>{f.direction}</span>
-                        {f.call_result && <><span className="text-gray-400">·</span><span>{f.call_result}</span></>}
-                        {f.duration_min && <><span className="text-gray-400">·</span><span>{f.duration_min} min</span></>}
-                      </div>
-                      <div className="flex gap-2">
-                        <button onClick={() => { setEditFollowupId(f.id); setEditFpData({}) }} className="text-blue-500 text-xs hover:underline">Edit</button>
-                        <button onClick={() => handleDeleteFollowup(f.id)} className="text-red-500 text-xs hover:underline">Delete</button>
+                      <FormField icon="quote" label="Customer Said" htmlFor={`fh-said-${f.id}`}>
+                        <textarea id={`fh-said-${f.id}`} rows={2} defaultValue={f.customer_said ?? ''} onChange={e => setEditFpData(p => ({ ...p, customer_said: e.target.value }))} className="fu-control" />
+                      </FormField>
+                      <FormField icon="pencil" label="Our Notes" htmlFor={`fh-notes-${f.id}`}>
+                        <textarea id={`fh-notes-${f.id}`} rows={2} defaultValue={f.our_notes ?? ''} onChange={e => setEditFpData(p => ({ ...p, our_notes: e.target.value }))} className="fu-control" />
+                      </FormField>
+                      <div className="flex justify-end gap-2 pt-1">
+                        <button onClick={() => setEditFollowupId(null)} className="edit-btn is-cancel">
+                          <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M6 18L18 6M6 6l12 12" /></svg>
+                          Cancel
+                        </button>
+                        <button onClick={() => saveEditFollowup(f.id)} className="edit-btn is-save">
+                          <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M5 13l4 4L19 7" /></svg>
+                          Save
+                        </button>
                       </div>
                     </div>
-                    <div className="text-xs text-gray-500">By <strong>{f.contacted_by}</strong>{f.spoke_with ? ` · Spoke with: ${f.spoke_with}` : ''}</div>
-                    {f.customer_said && (
-                      <div className="bg-blue-50 border-l-4 border-blue-400 px-3 py-2 text-sm">
-                        <span className="text-xs font-semibold text-blue-600">They said: </span>
-                        {f.customer_said}
+                  ) : (
+                    <div className="space-y-3">
+                      <div className="flex items-start justify-between gap-3 flex-wrap">
+                        <div>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="fh-title">{f.channel}</span>
+                            <span className="fh-chip">{f.direction}</span>
+                          </div>
+                          <div className="fh-time">{fmtDateTime(f.followup_at)}</div>
+                        </div>
+                        <div className="flex gap-2">
+                          <button onClick={() => { setEditFollowupId(f.id); setEditFpData({}) }} className="edit-btn is-sm">
+                            <svg viewBox="0 0 24 24" className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
+                            Edit
+                          </button>
+                          <button onClick={() => handleDeleteFollowup(f.id)} className="edit-btn is-sm is-danger">
+                            <svg viewBox="0 0 24 24" className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                            Delete
+                          </button>
+                        </div>
                       </div>
-                    )}
-                    {f.our_notes && (
-                      <div className="bg-gray-50 border-l-4 border-gray-300 px-3 py-2 text-sm text-gray-700">
-                        <span className="text-xs font-semibold text-gray-500">Our notes: </span>
-                        {f.our_notes}
+                      <div className="flex flex-wrap gap-2">
+                        <span className="fh-meta">👤 By <strong>{f.contacted_by}</strong></span>
+                        {f.spoke_with && <span className="fh-meta">🗣 Spoke with <strong>{f.spoke_with}</strong></span>}
+                        {f.call_result && <span className="fh-meta">📞 {f.call_result}</span>}
+                        {f.duration_min && <span className="fh-meta">⏱ {f.duration_min} min</span>}
                       </div>
-                    )}
-                    <div className="flex items-center gap-3 text-xs text-gray-500">
-                      <span>
-                        Status: {f.status_before ? <><StatusBadge status={f.status_before} /> → </> : ''}<StatusBadge status={f.status_after} />
-                      </span>
-                      {f.next_action && <span>· Next: {f.next_action}</span>}
-                      {f.next_followup_at && <span>· Follow-up: {fmtDate(f.next_followup_at)}</span>}
+                      {f.customer_said && (
+                        <div className="fh-quote is-said">
+                          <div className="sum-label">They said</div>
+                          <div>{f.customer_said}</div>
+                        </div>
+                      )}
+                      {f.our_notes && (
+                        <div className="fh-quote is-notes">
+                          <div className="sum-label">Our notes</div>
+                          <div>{f.our_notes}</div>
+                        </div>
+                      )}
+                      <div className="fh-footer">
+                        <span className="flex items-center gap-1.5">
+                          {f.status_before && <><StatusBadge status={f.status_before} /><span className="text-gray-400">→</span></>}
+                          <StatusBadge status={f.status_after} />
+                        </span>
+                        {f.next_action && <span>➡ Next: <strong>{f.next_action}</strong></span>}
+                        {f.next_followup_at && <span>📅 Follow-up: <strong>{fmtDate(f.next_followup_at)}</strong></span>}
+                      </div>
                     </div>
-                  </>
-                )}
+                  )}
+                </div>
               </div>
             ))}
           </div>

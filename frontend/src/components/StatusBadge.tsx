@@ -1,8 +1,8 @@
 import React from 'react'
 
 const STATUS_COLORS: Record<string, string> = {
-  "New": "#9e9e9e",
-  "Attempted - No Answer": "#ff9800",
+  "New": "#E53935",
+  "Attempted - No Answer": "#B87333",
   "Contacted": "#2196f3",
   "Interested": "#4caf50",
   "Follow-up Scheduled": "#9c27b0",
@@ -10,7 +10,7 @@ const STATUS_COLORS: Record<string, string> = {
   "Proposal Sent": "#3f51b5",
   "Negotiation": "#e91e63",
   "Converted": "#1b5e20",
-  "Not Interested": "#f44336",
+  "Not Interested": "#CC9A06",
   "Invalid / Wrong Number": "#bdbdbd",
   "Do Not Contact": "#212121",
 }
