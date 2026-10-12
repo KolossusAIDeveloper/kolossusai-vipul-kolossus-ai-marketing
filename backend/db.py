@@ -190,21 +190,25 @@ init_db = init_schema
 
 def count_users():
     conn = get_conn()
-    cur = conn.cursor()
-    cur.execute("SELECT COUNT(*) as cnt FROM users")
-    row = cur.fetchone()
-    cur.close()
-    conn.close()
+    try:
+        cur = conn.cursor()
+        cur.execute("SELECT COUNT(*) as cnt FROM users")
+        row = cur.fetchone()
+        cur.close()
+    finally:
+        conn.close()
     return row["cnt"]
 
 
 def get_status_counts():
     conn = get_conn()
-    cur = conn.cursor()
-    cur.execute("SELECT current_status, COUNT(*) as cnt FROM users GROUP BY current_status")
-    rows = cur.fetchall()
-    cur.close()
-    conn.close()
+    try:
+        cur = conn.cursor()
+        cur.execute("SELECT current_status, COUNT(*) as cnt FROM users GROUP BY current_status")
+        rows = cur.fetchall()
+        cur.close()
+    finally:
+        conn.close()
     return {r["current_status"]: r["cnt"] for r in rows}
 
 
@@ -214,69 +218,75 @@ def get_kpis():
     today_dt = datetime.date.today()
     week_start = (today_dt - datetime.timedelta(days=today_dt.weekday())).isoformat()
     conn = get_conn()
-    cur = conn.cursor()
-    cur.execute("SELECT COUNT(*) as cnt FROM users")
-    total = cur.fetchone()["cnt"]
-    cur.execute("SELECT COUNT(*) as cnt FROM users WHERE next_followup_at::date = %s", (today,))
-    due_today = cur.fetchone()["cnt"]
-    cur.execute(
-        """SELECT COUNT(*) as cnt FROM users
-           WHERE next_followup_at IS NOT NULL AND next_followup_at::date < %s
-           AND current_status NOT IN ('Converted','Not Interested','Invalid / Wrong Number','Do Not Contact')""",
-        (today,),
-    )
-    overdue = cur.fetchone()["cnt"]
-    # "Contacted this week" = had a follow-up logged since Monday of this week
-    cur.execute(
-        "SELECT COUNT(*) as cnt FROM users WHERE last_followup_at::date >= %s AND last_followup_at::date <= %s",
-        (week_start, today),
-    )
-    contacted_week = cur.fetchone()["cnt"]
-    cur.execute("SELECT COUNT(*) as cnt FROM users WHERE current_status = 'Converted'")
-    converted = cur.fetchone()["cnt"]
-    cur.close()
-    conn.close()
+    try:
+        cur = conn.cursor()
+        cur.execute("SELECT COUNT(*) as cnt FROM users")
+        total = cur.fetchone()["cnt"]
+        cur.execute("SELECT COUNT(*) as cnt FROM users WHERE next_followup_at::date = %s", (today,))
+        due_today = cur.fetchone()["cnt"]
+        cur.execute(
+            """SELECT COUNT(*) as cnt FROM users
+               WHERE next_followup_at IS NOT NULL AND next_followup_at::date < %s
+               AND current_status NOT IN ('Converted','Not Interested','Invalid / Wrong Number','Do Not Contact')""",
+            (today,),
+        )
+        overdue = cur.fetchone()["cnt"]
+        # "Contacted this week" = had a follow-up logged since Monday of this week
+        cur.execute(
+            "SELECT COUNT(*) as cnt FROM users WHERE last_followup_at::date >= %s AND last_followup_at::date <= %s",
+            (week_start, today),
+        )
+        contacted_week = cur.fetchone()["cnt"]
+        cur.execute("SELECT COUNT(*) as cnt FROM users WHERE current_status = 'Converted'")
+        converted = cur.fetchone()["cnt"]
+        cur.close()
+    finally:
+        conn.close()
     return dict(total=total, due_today=due_today, overdue=overdue,
                 contacted_week=contacted_week, converted=converted)
 
 
 def get_filter_options():
     conn = get_conn()
-    cur = conn.cursor()
+    try:
+        cur = conn.cursor()
 
-    def distinct(col):
-        cur.execute(f"SELECT DISTINCT {col} FROM users WHERE {col} IS NOT NULL ORDER BY {col}")
-        return [r[col] for r in cur.fetchall()]
+        def distinct(col):
+            cur.execute(f"SELECT DISTINCT {col} FROM users WHERE {col} IS NOT NULL ORDER BY {col}")
+            return [r[col] for r in cur.fetchall()]
 
-    opts = {
-        "company_type": distinct("company_type"),
-        "sector": distinct("sector"),
-        "msme_type": distinct("msme_type"),
-        "city": distinct("city"),
-        "designation": distinct("designation"),
-        "assigned_to": distinct("assigned_to"),
-        "priority": ["High", "Medium", "Low"],
-        "interest_level": ["Hot", "Warm", "Cold"],
-        "last_channel": distinct("last_channel"),
-    }
-    cur.close()
-    conn.close()
+        opts = {
+            "company_type": distinct("company_type"),
+            "sector": distinct("sector"),
+            "msme_type": distinct("msme_type"),
+            "city": distinct("city"),
+            "designation": distinct("designation"),
+            "assigned_to": distinct("assigned_to"),
+            "priority": ["High", "Medium", "Low"],
+            "interest_level": ["Hot", "Warm", "Cold"],
+            "last_channel": distinct("last_channel"),
+        }
+        cur.close()
+    finally:
+        conn.close()
     return opts
 
 
 def get_chart_data():
     conn = get_conn()
-    cur = conn.cursor()
-    cur.execute("SELECT sector, COUNT(*) as cnt FROM users WHERE sector IS NOT NULL GROUP BY sector ORDER BY cnt DESC LIMIT 10")
-    by_sector = [{"name": r["sector"], "value": r["cnt"]} for r in cur.fetchall()]
-    cur.execute("SELECT company_type, COUNT(*) as cnt FROM users WHERE company_type IS NOT NULL GROUP BY company_type ORDER BY cnt DESC")
-    by_company_type = [{"name": r["company_type"], "value": r["cnt"]} for r in cur.fetchall()]
-    cur.execute("SELECT city, COUNT(*) as cnt FROM users WHERE city IS NOT NULL GROUP BY city ORDER BY cnt DESC")
-    by_city = [{"name": r["city"], "value": r["cnt"]} for r in cur.fetchall()]
-    cur.execute("SELECT msme_type, COUNT(*) as cnt FROM users WHERE msme_type IS NOT NULL GROUP BY msme_type ORDER BY cnt DESC")
-    by_msme = [{"name": r["msme_type"], "value": r["cnt"]} for r in cur.fetchall()]
-    cur.close()
-    conn.close()
+    try:
+        cur = conn.cursor()
+        cur.execute("SELECT sector, COUNT(*) as cnt FROM users WHERE sector IS NOT NULL GROUP BY sector ORDER BY cnt DESC LIMIT 10")
+        by_sector = [{"name": r["sector"], "value": r["cnt"]} for r in cur.fetchall()]
+        cur.execute("SELECT company_type, COUNT(*) as cnt FROM users WHERE company_type IS NOT NULL GROUP BY company_type ORDER BY cnt DESC")
+        by_company_type = [{"name": r["company_type"], "value": r["cnt"]} for r in cur.fetchall()]
+        cur.execute("SELECT city, COUNT(*) as cnt FROM users WHERE city IS NOT NULL GROUP BY city ORDER BY cnt DESC")
+        by_city = [{"name": r["city"], "value": r["cnt"]} for r in cur.fetchall()]
+        cur.execute("SELECT msme_type, COUNT(*) as cnt FROM users WHERE msme_type IS NOT NULL GROUP BY msme_type ORDER BY cnt DESC")
+        by_msme = [{"name": r["msme_type"], "value": r["cnt"]} for r in cur.fetchall()]
+        cur.close()
+    finally:
+        conn.close()
     return dict(by_sector=by_sector, by_company_type=by_company_type, by_city=by_city, by_msme=by_msme)
 
 
@@ -308,9 +318,11 @@ def get_users(
 
     # Direct ID lookup — overrides all other filters
     if id_search:
+        # Parse first: appending the WHERE before a failed int() left a placeholder with no value
         try:
+            id_value = int(id_search)
             wheres.append("id = %s")
-            params.append(int(id_search))
+            params.append(id_value)
         except (ValueError, TypeError):
             pass
 
@@ -319,12 +331,21 @@ def get_users(
         params.append(statuses)
 
     if search:
-        wheres.append("(full_name ILIKE %s OR company ILIKE %s OR mobile ILIKE %s OR email ILIKE %s)")
-        s = f"%{search}%"
+        # Escape LIKE wildcards so '%' and '_' typed in the search box match literally
+        wheres.append(
+            "(full_name ILIKE %s ESCAPE '\\' OR company ILIKE %s ESCAPE '\\' "
+            "OR mobile ILIKE %s ESCAPE '\\' OR email ILIKE %s ESCAPE '\\')"
+        )
+        escaped = search.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        s = f"%{escaped}%"
         params.extend([s, s, s, s])
 
     if next_followup_filter == "Overdue":
-        wheres.append("next_followup_at IS NOT NULL AND next_followup_at::date < %s")
+        # Same definition as the Overdue KPI card: closed contacts are excluded
+        wheres.append(
+            "next_followup_at IS NOT NULL AND next_followup_at::date < %s "
+            "AND current_status NOT IN ('Converted','Not Interested','Invalid / Wrong Number','Do Not Contact')"
+        )
         params.append(today)
     elif next_followup_filter == "Today":
         wheres.append("next_followup_at::date = %s")
@@ -378,31 +399,40 @@ def get_users(
     safe_sort_dir = "DESC" if str(sort_dir).lower() == "desc" else "ASC"
 
     conn = get_conn()
-    cur = conn.cursor()
+    try:
+        cur = conn.cursor()
 
-    # Count total matching rows for pagination
-    cur.execute(f"SELECT COUNT(*) as cnt FROM users {where_clause}", params)
-    total = cur.fetchone()["cnt"]
+        # Count total matching rows for pagination
+        cur.execute(f"SELECT COUNT(*) as cnt FROM users {where_clause}", params)
+        total = cur.fetchone()["cnt"]
 
-    # Paginated fetch
-    page = max(1, page)
-    page_size = max(1, min(page_size, 500))
-    offset = (page - 1) * page_size
-    sql = f"SELECT {col_str} FROM users {where_clause} ORDER BY {safe_sort_by} {safe_sort_dir} LIMIT %s OFFSET %s"
-    cur.execute(sql, params + [page_size, offset])
-    rows = cur.fetchall()
-    cur.close()
-    conn.close()
+        sql = f"SELECT {col_str} FROM users {where_clause} ORDER BY {safe_sort_by} {safe_sort_dir}"
+        if page_size is None:
+            # Unpaginated fetch (used by CSV export)
+            page = 1
+            cur.execute(sql, params)
+        else:
+            # Paginated fetch
+            page = max(1, page)
+            page_size = max(1, min(page_size, 500))
+            offset = (page - 1) * page_size
+            cur.execute(sql + " LIMIT %s OFFSET %s", params + [page_size, offset])
+        rows = cur.fetchall()
+        cur.close()
+    finally:
+        conn.close()
     return {"items": [dict(r) for r in rows], "total": total, "page": page, "page_size": page_size}
 
 
 def get_user(user_id):
     conn = get_conn()
-    cur = conn.cursor()
-    cur.execute("SELECT * FROM users WHERE id = %s", (user_id,))
-    row = cur.fetchone()
-    cur.close()
-    conn.close()
+    try:
+        cur = conn.cursor()
+        cur.execute("SELECT * FROM users WHERE id = %s", (user_id,))
+        row = cur.fetchone()
+        cur.close()
+    finally:
+        conn.close()
     return dict(row) if row else None
 
 
@@ -425,20 +455,24 @@ def update_user(user_id, **fields):
     params.append(user_id)
     sql = f"UPDATE users SET {', '.join(set_parts)} WHERE id = %s"
     conn = get_conn()
-    cur = conn.cursor()
-    cur.execute(sql, params)
-    conn.commit()
-    cur.close()
-    conn.close()
+    try:
+        cur = conn.cursor()
+        cur.execute(sql, params)
+        conn.commit()
+        cur.close()
+    finally:
+        conn.close()
 
 
 def get_followups(user_id):
     conn = get_conn()
-    cur = conn.cursor()
-    cur.execute("SELECT * FROM followups WHERE user_id = %s ORDER BY followup_at DESC", (user_id,))
-    rows = cur.fetchall()
-    cur.close()
-    conn.close()
+    try:
+        cur = conn.cursor()
+        cur.execute("SELECT * FROM followups WHERE user_id = %s ORDER BY followup_at DESC", (user_id,))
+        rows = cur.fetchall()
+        cur.close()
+    finally:
+        conn.close()
     return [dict(r) for r in rows]
 
 
@@ -447,21 +481,27 @@ def insert_followup(
     contacted_by, spoke_with, customer_said, our_notes,
     status_before, status_after, next_action, next_followup_at,
 ):
+    if status_after in CLOSED_STATUSES:
+        next_followup_at = None  # closed contacts never get a next follow-up
     conn = get_conn()
-    cur = conn.cursor()
-    cur.execute(
-        """INSERT INTO followups
-           (user_id, followup_at, channel, direction, call_result, duration_min,
-            contacted_by, spoke_with, customer_said, our_notes,
-            status_before, status_after, next_action, next_followup_at)
-           VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
-        (user_id, followup_at, channel, direction, call_result or None, duration_min or None,
-         contacted_by, spoke_with or None, customer_said or None, our_notes or None,
-         status_before, status_after, next_action or None, next_followup_at or None),
-    )
-    conn.commit()
-    cur.close()
-    conn.close()
+    try:
+        # Close the connection even if the insert fails, so a failed save
+        # doesn't leave an open, aborted transaction holding locks.
+        cur = conn.cursor()
+        cur.execute(
+            """INSERT INTO followups
+               (user_id, followup_at, channel, direction, call_result, duration_min,
+                contacted_by, spoke_with, customer_said, our_notes,
+                status_before, status_after, next_action, next_followup_at)
+               VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
+            (user_id, followup_at, channel, direction, call_result or None, duration_min or None,
+             contacted_by, spoke_with or None, customer_said or None, our_notes or None,
+             status_before, status_after, next_action or None, next_followup_at or None),
+        )
+        conn.commit()
+        cur.close()
+    finally:
+        conn.close()
 
 
 def update_followup(followup_id, **fields):
@@ -476,32 +516,51 @@ def update_followup(followup_id, **fields):
     set_clause = ", ".join(f"{k} = %s" for k in updates)
     params = list(updates.values()) + [followup_id]
     conn = get_conn()
-    cur = conn.cursor()
-    cur.execute(f"UPDATE followups SET {set_clause} WHERE id = %s", params)
-    conn.commit()
-    cur.close()
-    conn.close()
+    try:
+        cur = conn.cursor()
+        cur.execute(f"UPDATE followups SET {set_clause} WHERE id = %s", params)
+        # Closed contacts never get a next follow-up
+        cur.execute(
+            "UPDATE followups SET next_followup_at = NULL WHERE id = %s AND status_after = ANY(%s)",
+            (followup_id, sorted(CLOSED_STATUSES)),
+        )
+        cur.execute("SELECT user_id FROM followups WHERE id = %s", (followup_id,))
+        row = cur.fetchone()
+        conn.commit()
+        cur.close()
+    finally:
+        conn.close()
+    # The insert trigger only fires on INSERT, so refresh the contact's
+    # status/dates/channel from its latest follow-up after an edit.
+    if row:
+        recalc_user(row["user_id"])
 
 
 def delete_followup(followup_id):
     conn = get_conn()
-    cur = conn.cursor()
-    cur.execute("SELECT user_id FROM followups WHERE id = %s", (followup_id,))
-    row = cur.fetchone()
+    try:
+        cur = conn.cursor()
+        cur.execute("SELECT user_id FROM followups WHERE id = %s", (followup_id,))
+        row = cur.fetchone()
+        if row:
+            cur.execute("DELETE FROM followups WHERE id = %s", (followup_id,))
+            conn.commit()
+        cur.close()
+    finally:
+        conn.close()
     if row:
-        user_id = row["user_id"]
-        cur.execute("DELETE FROM followups WHERE id = %s", (followup_id,))
-        conn.commit()
-        cur.close()
-        conn.close()
-        recalc_user(user_id)
-    else:
-        cur.close()
-        conn.close()
+        recalc_user(row["user_id"])
 
 
 def recalc_user(user_id):
     conn = get_conn()
+    try:
+        _recalc_user(conn, user_id)
+    finally:
+        conn.close()
+
+
+def _recalc_user(conn, user_id):
     cur = conn.cursor()
     cur.execute(
         "SELECT * FROM followups WHERE user_id = %s ORDER BY followup_at DESC LIMIT 1",
@@ -536,7 +595,6 @@ def recalc_user(user_id):
         )
     conn.commit()
     cur.close()
-    conn.close()
 
 
 def mask_aadhaar(val):
