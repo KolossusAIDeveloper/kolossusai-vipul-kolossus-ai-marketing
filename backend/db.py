@@ -406,17 +406,12 @@ def get_users(
         cur.execute(f"SELECT COUNT(*) as cnt FROM users {where_clause}", params)
         total = cur.fetchone()["cnt"]
 
-        sql = f"SELECT {col_str} FROM users {where_clause} ORDER BY {safe_sort_by} {safe_sort_dir}"
-        if page_size is None:
-            # Unpaginated fetch (used by CSV export)
-            page = 1
-            cur.execute(sql, params)
-        else:
-            # Paginated fetch
-            page = max(1, page)
-            page_size = max(1, min(page_size, 500))
-            offset = (page - 1) * page_size
-            cur.execute(sql + " LIMIT %s OFFSET %s", params + [page_size, offset])
+        # Paginated fetch
+        page = max(1, page)
+        page_size = max(1, min(page_size, 500))
+        offset = (page - 1) * page_size
+        sql = f"SELECT {col_str} FROM users {where_clause} ORDER BY {safe_sort_by} {safe_sort_dir} LIMIT %s OFFSET %s"
+        cur.execute(sql, params + [page_size, offset])
         rows = cur.fetchall()
         cur.close()
     finally:

@@ -1,13 +1,12 @@
 import io
 import os
-import csv
 from pathlib import Path
 from typing import Optional, List
 
 import psycopg2
 from fastapi import FastAPI, Depends, HTTPException, Header, UploadFile, File, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse, FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -226,62 +225,6 @@ def update_followup(followup_id: int, body: dict, auth=Depends(verify_token)):
 def delete_followup(followup_id: int, auth=Depends(verify_token)):
     db.delete_followup(followup_id)
     return {"ok": True}
-
-
-@app.get("/api/export-csv")
-def export_csv(
-    statuses: Optional[str] = Query(None),
-    search: Optional[str] = Query(None),
-    next_followup_filter: Optional[str] = Query(None),
-    last_followup_from: Optional[str] = Query(None),
-    last_followup_to: Optional[str] = Query(None),
-    company_types: Optional[str] = Query(None),
-    sectors: Optional[str] = Query(None),
-    msme_types: Optional[str] = Query(None),
-    cities: Optional[str] = Query(None),
-    designations: Optional[str] = Query(None),
-    assigned_tos: Optional[str] = Query(None),
-    priorities: Optional[str] = Query(None),
-    interest_levels: Optional[str] = Query(None),
-    last_channels: Optional[str] = Query(None),
-    auth=Depends(verify_token),
-):
-    def split(v):
-        return [x for x in v.split(",") if x] if v else None
-
-    rows = db.get_users(
-        statuses=split(statuses),
-        search=search,
-        next_followup_filter=next_followup_filter,
-        last_followup_from=last_followup_from,
-        last_followup_to=last_followup_to,
-        company_types=split(company_types),
-        sectors=split(sectors),
-        msme_types=split(msme_types),
-        cities=split(cities),
-        designations=split(designations),
-        assigned_tos=split(assigned_tos),
-        priorities=split(priorities),
-        interest_levels=split(interest_levels),
-        last_channels=split(last_channels),
-        page_size=None,  # export every matching contact, not just one page
-    )
-    serialized = [_serialize_dict(r) for r in rows["items"]]
-
-    output = io.StringIO()
-    if serialized:
-        writer = csv.DictWriter(output, fieldnames=serialized[0].keys())
-        writer.writeheader()
-        writer.writerows(serialized)
-    else:
-        output.write("")
-
-    output.seek(0)
-    return StreamingResponse(
-        iter([output.getvalue()]),
-        media_type="text/csv",
-        headers={"Content-Disposition": "attachment; filename=contacts.csv"},
-    )
 
 
 @app.post("/api/import")

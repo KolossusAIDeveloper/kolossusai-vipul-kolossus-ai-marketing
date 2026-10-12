@@ -73,21 +73,4 @@ export async function importExcel(file: File) {
   return res.data
 }
 
-export async function exportCsv(filters: Record<string, string> = {}) {
-  const params = new URLSearchParams()
-  Object.entries(filters).forEach(([k, v]) => { if (v) params.set(k, v) })
-  const token = localStorage.getItem('token')
-  const res = await fetch('/api/export-csv?' + params.toString(), {
-    headers: { Authorization: `Bearer ${token}` }
-  })
-  if (!res.ok) throw new Error(`Export failed (HTTP ${res.status})`)
-  const blob = await res.blob()
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = 'contacts.csv'
-  a.click()
-  URL.revokeObjectURL(url)
-}
-
 export default api
