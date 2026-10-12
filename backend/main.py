@@ -1,13 +1,12 @@
 import io
 import os
 import csv
-import sqlite3
 from pathlib import Path
 from typing import Optional, List
 
-from fastapi import FastAPI, Depends, HTTPException, Header, UploadFile, File, Query, Request
+from fastapi import FastAPI, Depends, HTTPException, Header, UploadFile, File, Query
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse, FileResponse, JSONResponse
+from fastapi.responses import StreamingResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -15,10 +14,7 @@ from backend import db
 from backend import importer as imp
 
 STATIC_TOKEN = "kolossus-static-token"
-DATA_FILE = os.environ.get(
-    "DATA_FILE",
-    str(Path(__file__).resolve().parent.parent / "data" / "dummy_leads.xlsx"),
-)
+DATA_FILE = os.environ.get("DATA_FILE", "/app/data/Gandhidham I-4.0.xlsx")
 
 app = FastAPI(title="Kolossus AI Marketing API")
 
@@ -31,17 +27,10 @@ app.add_middleware(
 )
 
 
-@app.exception_handler(sqlite3.IntegrityError)
-async def integrity_error_handler(request: Request, exc: sqlite3.IntegrityError):
-    # Bad input (missing required field, invalid choice, unknown contact) -> 400, not a server crash
-    return JSONResponse(status_code=400, content={"detail": f"Invalid data: {exc}"})
-
-
 def verify_token(authorization: str = Header(...)):
     if authorization != f"Bearer {STATIC_TOKEN}":
         raise HTTPException(status_code=401, detail="Invalid token")
     return True
-
 
 
 @app.on_event("startup")
@@ -49,27 +38,23 @@ async def startup():
     try:
         db._ensure_db_exists()
         db.init_schema()
-
         count = db.count_users()
-        print(f"SQLite database initialized. Existing users: {count}")
-        print(f"Configured Excel file: {DATA_FILE}")
-
-        if count == 0:
-            if Path(DATA_FILE).exists():
-                result = imp.import_excel(
-                    DATA_FILE,
-                    source_file=Path(DATA_FILE).name,
-                )
-                print(f"Excel import result: {result}")
-            else:
-                print(
-                    "Excel import skipped: workbook not found. "
-                    "Restore the workbook or configure DATA_FILE."
-                )
-
+        if count == 0 and Path(DATA_FILE).exists():
+            imp.import_excel(DATA_FILE, source_file=Path(DATA_FILE).name)
+        # Run multi-file importer (upsert-safe, skips already-imported files)
+        try:
+            import importlib.util, sys as _sys
+            spec = importlib.util.spec_from_file_location(
+                "multi_importer", "/app/multi_importer.py"
+            )
+            mi = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(mi)
+            mi.main()
+            print("Multi-file import completed.")
+        except Exception as me:
+            print(f"Multi-file import error (non-fatal): {me}")
     except Exception as e:
-        print(f"Startup DB initialization error: {e}")
-        raise
+        print(f"Startup DB init skipped (will retry on first request): {e}")
 
 
 class LoginRequest(BaseModel):
@@ -269,9 +254,8 @@ def export_csv(
         priorities=split(priorities),
         interest_levels=split(interest_levels),
         last_channels=split(last_channels),
-        page_size=None,
     )
-    serialized = [_serialize_dict(r) for r in rows["items"]]
+    serialized = [_serialize_dict(r) for r in rows]
 
     output = io.StringIO()
     if serialized:
@@ -293,13 +277,7 @@ def export_csv(
 async def import_file(file: UploadFile = File(...), auth=Depends(verify_token)):
     contents = await file.read()
     buf = io.BytesIO(contents)
-    try:
-        result = imp.import_excel(buf, source_file=file.filename)
-    except Exception as e:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Could not read this file. Upload an .xlsx with the leads on a sheet named 'Sheet1'. ({e})",
-        )
+    result = imp.import_excel(buf, source_file=file.filename)
     return result
 
 

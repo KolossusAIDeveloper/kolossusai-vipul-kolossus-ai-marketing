@@ -1,23 +1,28 @@
-﻿from pathlib import Path
-import datetime
 import os
-import re
-import sqlite3
+import psycopg2
+import psycopg2.extras
+import datetime
 
 STATUSES = [
-    "New", "Attempted - No Answer", "Contacted", "Interested",
-    "Follow-up Scheduled", "Demo Scheduled", "Proposal Sent",
-    "Negotiation", "Converted", "Not Interested",
-    "Invalid / Wrong Number", "Do Not Contact",
+    "New",
+    "Attempted - No Answer",
+    "Contacted",
+    "Interested",
+    "Follow-up Scheduled",
+    "Demo Scheduled",
+    "Proposal Sent",
+    "Negotiation",
+    "Converted",
+    "Not Interested",
+    "Invalid / Wrong Number",
+    "Do Not Contact",
 ]
 
-CLOSED_STATUSES = {
-    "Converted", "Not Interested", "Invalid / Wrong Number", "Do Not Contact"
-}
+CLOSED_STATUSES = {"Converted", "Not Interested", "Invalid / Wrong Number", "Do Not Contact"}
 
 STATUS_COLORS = {
-    "New": "#E53935",
-    "Attempted - No Answer": "#B87333",
+    "New": "#9e9e9e",
+    "Attempted - No Answer": "#ff9800",
     "Contacted": "#2196f3",
     "Interested": "#4caf50",
     "Follow-up Scheduled": "#9c27b0",
@@ -25,111 +30,161 @@ STATUS_COLORS = {
     "Proposal Sent": "#3f51b5",
     "Negotiation": "#e91e63",
     "Converted": "#1b5e20",
-    "Not Interested": "#CC9A06",
+    "Not Interested": "#f44336",
     "Invalid / Wrong Number": "#bdbdbd",
     "Do Not Contact": "#212121",
 }
 
-CHANNELS = [
-    "Call", "WhatsApp", "Email", "SMS", "Meeting",
-    "Video Call", "Visit", "LinkedIn", "Other"
-]
-
-CALL_RESULTS = [
-    "Connected", "No Answer", "Busy", "Switched Off",
-    "Wrong Number", "Replied", "Not Replied"
-]
-
-ROOT_DIR = Path(__file__).resolve().parent.parent
-DB_PATH = Path(os.environ.get(
-    "DB_PATH", str(ROOT_DIR / "data" / "kolossus.db")
-)).resolve()
-
-
-class CompatCursor(sqlite3.Cursor):
-    """Translate common PostgreSQL query syntax used by existing functions."""
-
-    def execute(self, sql, parameters=()):
-        params = list(parameters or ())
-
-        # Translate column = ANY(%s) into SQLite IN (?, ?, ...).
-        pattern = re.compile(r"([\w.]+)\s*=\s*ANY\(%s\)", re.I)
-        matches = list(pattern.finditer(sql))
-        replacements = []
-
-        for match in matches:
-            param_index = sql[:match.start()].count("%s")
-            values = params[param_index]
-
-            if not isinstance(values, (list, tuple, set)):
-                values = [values]
-
-            values = list(values)
-            replacement = (
-                f"{match.group(1)} IN ({','.join('?' for _ in values)})"
-                if values else "0"
-            )
-            replacements.append((match.start(), match.end(), param_index, values, replacement))
-
-        expanded = []
-        any_by_index = {
-            index: values
-            for _, _, index, values, _ in replacements
-        }
-
-        for index, value in enumerate(params):
-            if index in any_by_index:
-                expanded.extend(any_by_index[index])
-            else:
-                expanded.append(value)
-
-        for start, end, _, _, replacement in reversed(replacements):
-            sql = sql[:start] + replacement + sql[end:]
-
-        sql = re.sub(r"\bILIKE\b", "LIKE", sql, flags=re.I)
-        sql = re.sub(r"\b([\w.]+)::date\b", r"date(\1)", sql, flags=re.I)
-        sql = re.sub(r"\bNOW\s*\(\s*\)", "CURRENT_TIMESTAMP", sql, flags=re.I)
-        sql = sql.replace("%s", "?")
-
-        return super().execute(sql, expanded)
-
-
-class CompatConnection(sqlite3.Connection):
-    def cursor(self, factory=CompatCursor):
-        return super().cursor(factory)
+CHANNELS = ["Call", "WhatsApp", "Email", "SMS", "Meeting", "Video Call", "Visit", "LinkedIn", "Other"]
+CALL_RESULTS = ["Connected", "No Answer", "Busy", "Switched Off", "Wrong Number", "Replied", "Not Replied"]
 
 
 def _ensure_db_exists():
-    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+    target = os.environ.get("DB_NAME", "kolossus_marketing")
+    try:
+        admin = psycopg2.connect(
+            host=os.environ["DB_HOST"],
+            port=int(os.environ.get("DB_PORT", "5432")),
+            dbname="postgres",
+            user=os.environ.get("DB_USER", "postgres"),
+            password=os.environ["DB_PASSWORD"],
+            sslmode=os.environ.get("DB_SSLMODE", "require"),
+            connect_timeout=10,
+        )
+        admin.autocommit = True
+        cur = admin.cursor()
+        cur.execute("SELECT 1 FROM pg_database WHERE datname = %s", (target,))
+        if not cur.fetchone():
+            cur.execute(f'CREATE DATABASE "{target}"')
+        cur.close()
+        admin.close()
+    except Exception:
+        pass
 
 
 def get_conn():
-    _ensure_db_exists()
-    conn = sqlite3.connect(
-        str(DB_PATH),
-        timeout=30,
-        factory=CompatConnection,
+    return psycopg2.connect(
+        host=os.environ["DB_HOST"],
+        port=int(os.environ.get("DB_PORT", "5432")),
+        dbname=os.environ.get("DB_NAME", "kolossus_marketing"),
+        user=os.environ.get("DB_USER", "postgres"),
+        password=os.environ["DB_PASSWORD"],
+        sslmode=os.environ.get("DB_SSLMODE", "require"),
+        connect_timeout=10,
+        cursor_factory=psycopg2.extras.RealDictCursor,
     )
-    conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA foreign_keys = ON")
-    return conn
 
 
 def init_schema():
-    _ensure_db_exists()
-    schema_path = ROOT_DIR / "schema.sql"
-
-    if not schema_path.exists():
-        raise FileNotFoundError(f"SQLite schema not found: {schema_path}")
-
     conn = get_conn()
-    try:
-        conn.executescript(schema_path.read_text(encoding="utf-8"))
-        conn.commit()
-    finally:
-        conn.close()
+    cur = conn.cursor()
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS users (
+          id                    SERIAL PRIMARY KEY,
+          sr_no                 INTEGER,
+          full_name             TEXT NOT NULL,
+          designation           TEXT,
+          company               TEXT,
+          mobile                TEXT,
+          email                 TEXT,
+          social_category       TEXT,
+          gender                TEXT,
+          msme_type             TEXT,
+          udyam_aadhaar         TEXT,
+          sector                TEXT,
+          company_type          TEXT,
+          address               TEXT,
+          city                  TEXT,
+          current_status        TEXT NOT NULL DEFAULT 'New'
+                                  CHECK (current_status IN (
+                                    'New','Attempted - No Answer','Contacted','Interested',
+                                    'Follow-up Scheduled','Demo Scheduled','Proposal Sent',
+                                    'Negotiation','Converted','Not Interested',
+                                    'Invalid / Wrong Number','Do Not Contact')),
+          status_updated_at     TIMESTAMP,
+          last_followup_at      TIMESTAMP,
+          last_channel          TEXT,
+          last_outcome          TEXT,
+          next_followup_at      TIMESTAMP,
+          followup_count        INTEGER NOT NULL DEFAULT 0,
+          assigned_to           TEXT,
+          priority              TEXT NOT NULL DEFAULT 'Medium'
+                                  CHECK (priority IN ('High','Medium','Low')),
+          interest_level        TEXT CHECK (interest_level IN ('Hot','Warm','Cold') OR interest_level IS NULL),
+          lead_source           TEXT NOT NULL DEFAULT 'Gandhidham I-4.0 Excel',
+          notes                 TEXT,
+          possible_duplicate_of INTEGER REFERENCES users(id),
+          data_quality_flag     TEXT,
+          raw_json              TEXT,
+          source_file           TEXT,
+          created_at            TIMESTAMP NOT NULL DEFAULT NOW(),
+          updated_at            TIMESTAMP NOT NULL DEFAULT NOW(),
+          UNIQUE (source_file, sr_no)
+        )
+    """)
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS followups (
+          id               SERIAL PRIMARY KEY,
+          user_id          INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          followup_at      TIMESTAMP NOT NULL,
+          channel          TEXT NOT NULL CHECK (channel IN
+                             ('Call','WhatsApp','Email','SMS','Meeting','Video Call','Visit','LinkedIn','Other')),
+          direction        TEXT NOT NULL DEFAULT 'Outbound' CHECK (direction IN ('Outbound','Inbound')),
+          call_result      TEXT CHECK (call_result IN
+                             ('Connected','No Answer','Busy','Switched Off','Wrong Number','Replied','Not Replied')
+                             OR call_result IS NULL),
+          duration_min     INTEGER,
+          contacted_by     TEXT NOT NULL,
+          spoke_with       TEXT,
+          customer_said    TEXT,
+          our_notes        TEXT,
+          status_before    TEXT,
+          status_after     TEXT NOT NULL,
+          next_action      TEXT,
+          next_followup_at TIMESTAMP,
+          created_at       TIMESTAMP NOT NULL DEFAULT NOW()
+        )
+    """)
+    cur.execute("CREATE INDEX IF NOT EXISTS ix_users_status   ON users(current_status)")
+    cur.execute("CREATE INDEX IF NOT EXISTS ix_users_next     ON users(next_followup_at)")
+    cur.execute("CREATE INDEX IF NOT EXISTS ix_users_mobile   ON users(mobile)")
+    cur.execute("CREATE INDEX IF NOT EXISTS ix_followups_user ON followups(user_id, followup_at DESC)")
+
+    cur.execute("""
+        CREATE OR REPLACE FUNCTION trg_followup_insert_fn() RETURNS TRIGGER AS $$
+        BEGIN
+          UPDATE users SET
+            current_status    = CASE WHEN last_followup_at IS NULL OR NEW.followup_at >= last_followup_at
+                                     THEN NEW.status_after ELSE current_status END,
+            status_updated_at = CASE WHEN last_followup_at IS NULL OR NEW.followup_at >= last_followup_at
+                                     THEN NEW.followup_at ELSE status_updated_at END,
+            last_channel      = CASE WHEN last_followup_at IS NULL OR NEW.followup_at >= last_followup_at
+                                     THEN NEW.channel ELSE last_channel END,
+            last_outcome      = CASE WHEN last_followup_at IS NULL OR NEW.followup_at >= last_followup_at
+                                     THEN COALESCE(NEW.customer_said, NEW.call_result) ELSE last_outcome END,
+            next_followup_at  = CASE WHEN last_followup_at IS NULL OR NEW.followup_at >= last_followup_at
+                                     THEN NEW.next_followup_at ELSE next_followup_at END,
+            last_followup_at  = GREATEST(COALESCE(last_followup_at, '1970-01-01'::timestamp), NEW.followup_at),
+            followup_count    = (SELECT COUNT(*) FROM followups WHERE user_id = NEW.user_id),
+            updated_at        = NOW()
+          WHERE id = NEW.user_id;
+          RETURN NEW;
+        END;
+        $$ LANGUAGE plpgsql;
+    """)
+    cur.execute("DROP TRIGGER IF EXISTS trg_followup_insert ON followups")
+    cur.execute("""
+        CREATE TRIGGER trg_followup_insert
+        AFTER INSERT ON followups
+        FOR EACH ROW EXECUTE FUNCTION trg_followup_insert_fn()
+    """)
+
+    conn.commit()
+    cur.close()
+    conn.close()
 
 
+# alias
 init_db = init_schema
 
 
@@ -251,12 +306,11 @@ def get_users(
     wheres = []
     params = []
 
-    # Direct ID lookup â€” overrides all other filters
+    # Direct ID lookup — overrides all other filters
     if id_search:
         try:
-            id_value = int(id_search)
             wheres.append("id = %s")
-            params.append(id_value)
+            params.append(int(id_search))
         except (ValueError, TypeError):
             pass
 
@@ -265,17 +319,12 @@ def get_users(
         params.append(statuses)
 
     if search:
-        # Escape LIKE wildcards so '%' and '_' in the search box match literally
-        wheres.append("(full_name ILIKE %s ESCAPE '\\' OR company ILIKE %s ESCAPE '\\' "
-                      "OR mobile ILIKE %s ESCAPE '\\' OR email ILIKE %s ESCAPE '\\')")
-        escaped = search.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
-        s = f"%{escaped}%"
+        wheres.append("(full_name ILIKE %s OR company ILIKE %s OR mobile ILIKE %s OR email ILIKE %s)")
+        s = f"%{search}%"
         params.extend([s, s, s, s])
 
     if next_followup_filter == "Overdue":
-        # Same definition as the Overdue KPI card: closed contacts are excluded
-        wheres.append("next_followup_at IS NOT NULL AND next_followup_at::date < %s "
-                      "AND current_status NOT IN ('Converted','Not Interested','Invalid / Wrong Number','Do Not Contact')")
+        wheres.append("next_followup_at IS NOT NULL AND next_followup_at::date < %s")
         params.append(today)
     elif next_followup_filter == "Today":
         wheres.append("next_followup_at::date = %s")
@@ -335,17 +384,12 @@ def get_users(
     cur.execute(f"SELECT COUNT(*) as cnt FROM users {where_clause}", params)
     total = cur.fetchone()["cnt"]
 
-    sql = f"SELECT {col_str} FROM users {where_clause} ORDER BY {safe_sort_by} {safe_sort_dir}"
-    if page_size is None:
-        # Unpaginated fetch (used by CSV export)
-        page = 1
-        cur.execute(sql, params)
-    else:
-        # Paginated fetch
-        page = max(1, page)
-        page_size = max(1, min(page_size, 500))
-        offset = (page - 1) * page_size
-        cur.execute(sql + " LIMIT %s OFFSET %s", params + [page_size, offset])
+    # Paginated fetch
+    page = max(1, page)
+    page_size = max(1, min(page_size, 500))
+    offset = (page - 1) * page_size
+    sql = f"SELECT {col_str} FROM users {where_clause} ORDER BY {safe_sort_by} {safe_sort_dir} LIMIT %s OFFSET %s"
+    cur.execute(sql, params + [page_size, offset])
     rows = cur.fetchall()
     cur.close()
     conn.close()
@@ -381,11 +425,11 @@ def update_user(user_id, **fields):
     params.append(user_id)
     sql = f"UPDATE users SET {', '.join(set_parts)} WHERE id = %s"
     conn = get_conn()
-    try:
-        conn.cursor().execute(sql, params)
-        conn.commit()
-    finally:
-        conn.close()
+    cur = conn.cursor()
+    cur.execute(sql, params)
+    conn.commit()
+    cur.close()
+    conn.close()
 
 
 def get_followups(user_id):
@@ -403,25 +447,21 @@ def insert_followup(
     contacted_by, spoke_with, customer_said, our_notes,
     status_before, status_after, next_action, next_followup_at,
 ):
-    if status_after in CLOSED_STATUSES:
-        next_followup_at = None  # closed contacts never get a next follow-up
     conn = get_conn()
-    try:
-        # Close the connection even if the insert fails, otherwise the
-        # half-finished write keeps the whole database locked.
-        conn.cursor().execute(
-            """INSERT INTO followups
-               (user_id, followup_at, channel, direction, call_result, duration_min,
-                contacted_by, spoke_with, customer_said, our_notes,
-                status_before, status_after, next_action, next_followup_at)
-               VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
-            (user_id, followup_at, channel, direction, call_result or None, duration_min or None,
-             contacted_by, spoke_with or None, customer_said or None, our_notes or None,
-             status_before, status_after, next_action or None, next_followup_at or None),
-        )
-        conn.commit()
-    finally:
-        conn.close()
+    cur = conn.cursor()
+    cur.execute(
+        """INSERT INTO followups
+           (user_id, followup_at, channel, direction, call_result, duration_min,
+            contacted_by, spoke_with, customer_said, our_notes,
+            status_before, status_after, next_action, next_followup_at)
+           VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
+        (user_id, followup_at, channel, direction, call_result or None, duration_min or None,
+         contacted_by, spoke_with or None, customer_said or None, our_notes or None,
+         status_before, status_after, next_action or None, next_followup_at or None),
+    )
+    conn.commit()
+    cur.close()
+    conn.close()
 
 
 def update_followup(followup_id, **fields):
@@ -436,21 +476,11 @@ def update_followup(followup_id, **fields):
     set_clause = ", ".join(f"{k} = %s" for k in updates)
     params = list(updates.values()) + [followup_id]
     conn = get_conn()
-    try:
-        cur = conn.cursor()
-        cur.execute(f"UPDATE followups SET {set_clause} WHERE id = %s", params)
-        # Closed contacts never get a next follow-up
-        cur.execute(
-            "UPDATE followups SET next_followup_at = NULL WHERE id = %s AND status_after = ANY(%s)",
-            (followup_id, list(CLOSED_STATUSES)),
-        )
-        conn.commit()
-        cur.execute("SELECT user_id FROM followups WHERE id = %s", (followup_id,))
-        row = cur.fetchone()
-    finally:
-        conn.close()
-    if row:
-        recalc_user(row["user_id"])
+    cur = conn.cursor()
+    cur.execute(f"UPDATE followups SET {set_clause} WHERE id = %s", params)
+    conn.commit()
+    cur.close()
+    conn.close()
 
 
 def delete_followup(followup_id):
@@ -535,4 +565,3 @@ def fmt_date(val):
             return d.strftime("%d-%m-%Y")
     except Exception:
         return str(val)
-
