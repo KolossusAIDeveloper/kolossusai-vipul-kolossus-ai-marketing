@@ -4,9 +4,10 @@ import csv
 from pathlib import Path
 from typing import Optional, List
 
-from fastapi import FastAPI, Depends, HTTPException, Header, UploadFile, File, Query
+import psycopg2
+from fastapi import FastAPI, Depends, HTTPException, Header, UploadFile, File, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse, FileResponse
+from fastapi.responses import StreamingResponse, FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -25,6 +26,15 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.exception_handler(psycopg2.IntegrityError)
+@app.exception_handler(psycopg2.DataError)
+async def invalid_data_handler(request: Request, exc: psycopg2.Error):
+    # Bad input (missing required field, invalid choice or date, unknown contact)
+    # -> 400 with a readable message, not a 500 server crash
+    message = str(exc).strip().splitlines()[0] if str(exc).strip() else exc.__class__.__name__
+    return JSONResponse(status_code=400, content={"detail": f"Invalid data: {message}"})
 
 
 def verify_token(authorization: str = Header(...)):
@@ -254,8 +264,9 @@ def export_csv(
         priorities=split(priorities),
         interest_levels=split(interest_levels),
         last_channels=split(last_channels),
+        page_size=None,  # export every matching contact, not just one page
     )
-    serialized = [_serialize_dict(r) for r in rows]
+    serialized = [_serialize_dict(r) for r in rows["items"]]
 
     output = io.StringIO()
     if serialized:
@@ -277,7 +288,13 @@ def export_csv(
 async def import_file(file: UploadFile = File(...), auth=Depends(verify_token)):
     contents = await file.read()
     buf = io.BytesIO(contents)
-    result = imp.import_excel(buf, source_file=file.filename)
+    try:
+        result = imp.import_excel(buf, source_file=file.filename)
+    except Exception as e:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Could not read this file. Upload an .xlsx with the leads on a sheet named 'Sheet1'. ({e})",
+        )
     return result
 
 

@@ -71,16 +71,6 @@ def import_excel(file_path_or_obj, source_file=None):
 
     inserted = updated = skipped = duplicates = quality_flags = 0
     rows_read = len(df)
-
-    mobile_first = {}
-    for _, row in df.iterrows():
-        mobile_raw = _clean_str(row.get("mobile"))
-        if mobile_raw:
-            mobile_clean = re.sub(r"\.0$", "", mobile_raw)
-            sr = _clean_str(row.get("sr_no"))
-            if mobile_clean not in mobile_first:
-                mobile_first[mobile_clean] = sr
-
     conn = db.get_conn()
     cur = conn.cursor()
 
@@ -132,24 +122,35 @@ def import_excel(file_path_or_obj, source_file=None):
         if not full_name:
             skipped += 1
             continue
-
-        possible_duplicate_of = None
-        if mobile and mobile in mobile_first and mobile_first[mobile] != sr_no_str:
-            cur.execute(
-                "SELECT id FROM users WHERE mobile = %s ORDER BY sr_no LIMIT 1", (mobile,)
-            )
-            existing = cur.fetchone()
-            if existing:
-                possible_duplicate_of = existing["id"]
-                duplicates += 1
-
-        cur.execute(
-            "SELECT id FROM users WHERE source_file = %s AND sr_no = %s",
-            (source_file, sr_no),
-        )
-        existing_row = cur.fetchone()
-
         try:
+            cur.execute("SAVEPOINT import_row")
+            cur.execute(
+                "SELECT id FROM users WHERE source_file = %s AND sr_no = %s",
+                (source_file, sr_no),
+            )
+            existing_row = cur.fetchone()
+            # Flag a contact only when an earlier database row has the same mobile.
+            # This works across different Excel files and avoids flagging a row
+            # as a duplicate of itself during re-import.
+            possible_duplicate_of = None
+            if mobile:
+                if existing_row:
+                    cur.execute(
+                        """SELECT id FROM users
+                           WHERE mobile = %s AND id < %s
+                           ORDER BY id LIMIT 1""",
+                        (mobile, existing_row["id"]),
+                    )
+                else:
+                    cur.execute(
+                        """SELECT id FROM users
+                           WHERE mobile = %s
+                           ORDER BY id LIMIT 1""",
+                        (mobile,),
+                    )
+                existing = cur.fetchone()
+                if existing:
+                    possible_duplicate_of = existing["id"]
             if existing_row:
                 cur.execute(
                     """UPDATE users SET
@@ -159,13 +160,14 @@ def import_excel(file_path_or_obj, source_file=None):
                        possible_duplicate_of=%s, data_quality_flag=%s, raw_json=%s,
                        updated_at=NOW()
                        WHERE source_file=%s AND sr_no=%s""",
-                    (full_name, designation, company, mobile, email,
-                     social_category, gender, msme_type, udyam_aadhaar,
-                     sector, company_type, address, city,
-                     possible_duplicate_of, data_quality_flag, raw_json,
-                     source_file, sr_no),
+                    (
+                        full_name, designation, company, mobile, email,
+                        social_category, gender, msme_type, udyam_aadhaar,
+                        sector, company_type, address, city,
+                        possible_duplicate_of, data_quality_flag, raw_json,
+                        source_file, sr_no,
+                    ),
                 )
-                updated += 1
             else:
                 cur.execute(
                     """INSERT INTO users
@@ -174,49 +176,27 @@ def import_excel(file_path_or_obj, source_file=None):
                         sector, company_type, address, city,
                         possible_duplicate_of, data_quality_flag, raw_json, source_file)
                        VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
-                    (sr_no, full_name, designation, company, mobile, email,
-                     social_category, gender, msme_type, udyam_aadhaar,
-                     sector, company_type, address, city,
-                     possible_duplicate_of, data_quality_flag, raw_json, source_file),
+                    (
+                        sr_no, full_name, designation, company, mobile, email,
+                        social_category, gender, msme_type, udyam_aadhaar,
+                        sector, company_type, address, city,
+                        possible_duplicate_of, data_quality_flag, raw_json,
+                        source_file,
+                    ),
                 )
+            # Count outcomes only after the database operation succeeds.
+            if possible_duplicate_of is not None:
+                duplicates += 1
+            if existing_row:
+                updated += 1
+            else:
                 inserted += 1
+            cur.execute("RELEASE SAVEPOINT import_row")
         except Exception:
-            conn.rollback()
+            cur.execute("ROLLBACK TO SAVEPOINT import_row")
+            cur.execute("RELEASE SAVEPOINT import_row")
             skipped += 1
             continue
-
-    conn.commit()
-
-    for _, row in df.iterrows():
-        mobile_raw = _clean_str(row.get("mobile"))
-        if not mobile_raw:
-            continue
-        mobile = re.sub(r"\.0$", "", mobile_raw)
-        sr_no_raw = _clean_str(row.get("sr_no"))
-        if not sr_no_raw:
-            continue
-        sr_no_str = re.sub(r"\.0$", "", sr_no_raw)
-        try:
-            sr_no = int(float(sr_no_str))
-        except ValueError:
-            continue
-
-        if mobile in mobile_first and mobile_first[mobile] != sr_no_str:
-            cur.execute(
-                "SELECT id FROM users WHERE mobile = %s ORDER BY sr_no LIMIT 1", (mobile,)
-            )
-            first = cur.fetchone()
-            cur.execute(
-                "SELECT id, possible_duplicate_of FROM users WHERE source_file = %s AND sr_no = %s",
-                (source_file, sr_no),
-            )
-            this = cur.fetchone()
-            if first and this and this["possible_duplicate_of"] is None:
-                cur.execute(
-                    "UPDATE users SET possible_duplicate_of = %s WHERE id = %s",
-                    (first["id"], this["id"]),
-                )
-
     conn.commit()
     cur.close()
     conn.close()
