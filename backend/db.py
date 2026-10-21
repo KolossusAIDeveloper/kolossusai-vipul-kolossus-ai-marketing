@@ -224,14 +224,14 @@ def get_kpis():
         cur.execute("SELECT COUNT(*) as cnt FROM users")
         total = cur.fetchone()["cnt"]
         cur.execute(
-            "SELECT COUNT(*) as cnt FROM users WHERE (next_followup_at AT TIME ZONE 'Asia/Kolkata')::date = %s",
+            "SELECT COUNT(*) as cnt FROM users WHERE next_followup_at::date = %s",
             (today,),
         )
         due_today = cur.fetchone()["cnt"]
         cur.execute(
             """SELECT COUNT(*) as cnt FROM users
                WHERE next_followup_at IS NOT NULL
-               AND (next_followup_at AT TIME ZONE 'Asia/Kolkata')::date < %s
+               AND next_followup_at::date < %s
                AND current_status NOT IN ('Converted','Not Interested','Invalid / Wrong Number','Do Not Contact')""",
             (today,),
         )
@@ -239,8 +239,8 @@ def get_kpis():
         # "Contacted this week" = had a follow-up logged since Monday of this week (IST)
         cur.execute(
             """SELECT COUNT(*) as cnt FROM users
-               WHERE (last_followup_at AT TIME ZONE 'Asia/Kolkata')::date >= %s
-               AND (last_followup_at AT TIME ZONE 'Asia/Kolkata')::date <= %s""",
+               WHERE last_followup_at::date >= %s
+               AND last_followup_at::date <= %s""",
             (week_start, today),
         )
         contacted_week = cur.fetchone()["cnt"]
@@ -350,36 +350,36 @@ def get_users(
 
     if next_followup_filter == "Overdue":
         wheres.append(
-            "next_followup_at IS NOT NULL AND (next_followup_at AT TIME ZONE 'Asia/Kolkata')::date < %s "
+            "next_followup_at IS NOT NULL AND next_followup_at::date < %s "
             "AND current_status NOT IN ('Converted','Not Interested','Invalid / Wrong Number','Do Not Contact')"
         )
         params.append(today)
     elif next_followup_filter == "Today":
-        wheres.append("(next_followup_at AT TIME ZONE 'Asia/Kolkata')::date = %s")
+        wheres.append("next_followup_at::date = %s")
         params.append(today)
     elif next_followup_filter == "This week":
-        wheres.append("(next_followup_at AT TIME ZONE 'Asia/Kolkata')::date BETWEEN %s AND %s")
+        wheres.append("next_followup_at::date BETWEEN %s AND %s")
         params.extend([today, week_end])
     elif next_followup_filter == "Not scheduled":
         wheres.append("next_followup_at IS NULL")
 
     if last_followup_filter == "This week":
         wheres.append(
-            "(last_followup_at AT TIME ZONE 'Asia/Kolkata')::date >= %s "
-            "AND (last_followup_at AT TIME ZONE 'Asia/Kolkata')::date <= %s"
+            "last_followup_at::date >= %s "
+            "AND last_followup_at::date <= %s"
         )
         params.extend([week_start, today])
     elif last_followup_filter == "Today":
-        wheres.append("(last_followup_at AT TIME ZONE 'Asia/Kolkata')::date = %s")
+        wheres.append("last_followup_at::date = %s")
         params.append(today)
     elif last_followup_filter == "Never":
         wheres.append("last_followup_at IS NULL")
 
     if last_followup_from:
-        wheres.append("(last_followup_at AT TIME ZONE 'Asia/Kolkata')::date >= %s")
+        wheres.append("last_followup_at::date >= %s")
         params.append(str(last_followup_from))
     if last_followup_to:
-        wheres.append("(last_followup_at AT TIME ZONE 'Asia/Kolkata')::date <= %s")
+        wheres.append("last_followup_at::date <= %s")
         params.append(str(last_followup_to))
 
     def multi(col, vals):
@@ -630,7 +630,15 @@ def fmt_date(val):
 
 
 def get_contacts_by_date(date_str: str):
-    """Return contacts who had any outbound follow-up on the given date (YYYY-MM-DD)."""
+    """Return contacts who had any outbound follow-up on the given date (YYYY-MM-DD).
+
+    followup_at is stored as a naive TIMESTAMP whose wall-clock value is already in IST
+    (the frontend sends nowIST() — a local IST string with no timezone suffix).
+    We must NOT apply AT TIME ZONE 'Asia/Kolkata' here, because that would tell
+    PostgreSQL to treat the stored value as UTC and shift it +5:30, causing
+    late-evening IST follow-ups (e.g. 11 PM IST stored as 23:00) to appear under
+    the *next* calendar date.  A plain ::date cast gives the correct IST date.
+    """
     conn = get_conn()
     try:
         cur = conn.cursor()
@@ -641,7 +649,7 @@ def get_contacts_by_date(date_str: str):
                    f.followup_at, f.channel, f.contacted_by, f.our_notes
             FROM followups f
             JOIN users u ON u.id = f.user_id
-            WHERE (f.followup_at AT TIME ZONE 'Asia/Kolkata')::date = %s
+            WHERE f.followup_at::date = %s
               AND f.direction = 'Outbound'
             ORDER BY f.id, f.followup_at DESC
             """,
@@ -650,7 +658,7 @@ def get_contacts_by_date(date_str: str):
         rows = cur.fetchall()
         cur.execute(
             """SELECT COUNT(DISTINCT user_id) FROM followups
-               WHERE (followup_at AT TIME ZONE 'Asia/Kolkata')::date = %s AND direction = 'Outbound'""",
+               WHERE followup_at::date = %s AND direction = 'Outbound'""",
             (date_str,),
         )
         count = cur.fetchone()["count"]
