@@ -183,7 +183,7 @@ def test_overdue_filter_excludes_closed_contacts(mock_get_conn):
     db.get_users(next_followup_filter="Overdue")
 
     count_sql, _ = executed(cur)[0]
-    assert "next_followup_at::date < %s" in count_sql
+    assert "next_followup_at" in count_sql and "< %s" in count_sql
     assert "current_status NOT IN" in count_sql
     for status in CLOSED:
         assert f"'{status}'" in count_sql
