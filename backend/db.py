@@ -644,14 +644,14 @@ def get_contacts_by_date(date_str: str):
         cur = conn.cursor()
         cur.execute(
             """
-            SELECT DISTINCT ON (f.id) u.id, u.full_name, u.company, u.mobile, u.designation,
+            SELECT u.id, u.full_name, u.company, u.mobile, u.designation,
                    u.city, u.sector, u.current_status,
                    f.followup_at, f.channel, f.contacted_by, f.our_notes
             FROM followups f
             JOIN users u ON u.id = f.user_id
             WHERE f.followup_at::date = %s
               AND f.direction = 'Outbound'
-            ORDER BY f.id, f.followup_at DESC
+            ORDER BY f.followup_at DESC
             """,
             (date_str,),
         )
