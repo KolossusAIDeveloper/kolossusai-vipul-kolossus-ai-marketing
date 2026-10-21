@@ -24,9 +24,18 @@ export function todayISTStr(): string {
   return new Date().toLocaleDateString('en-CA', { timeZone: TZ })
 }
 
-/** Parse any ISO/pg timestamp and return a Date interpreted in IST */
+/** Parse any ISO/pg timestamp and return a Date interpreted in IST.
+ *  Naive strings (no Z / no offset) are treated as IST wall-clock time
+ *  by appending +05:30 before parsing.
+ */
 function toISTDate(val: string): Date {
-  return new Date(val) // JS Date is always a UTC instant; we just display in IST
+  if (!val) return new Date(NaN)
+  // Already has timezone info — parse as-is
+  if (val.includes('Z') || val.includes('+') || /T\d{2}:\d{2}:\d{2}-/.test(val)) {
+    return new Date(val)
+  }
+  // Naive string — treat as IST wall-clock
+  return new Date(val + '+05:30')
 }
 
 /** DD-MM-YYYY */
@@ -72,7 +81,7 @@ export function lastContactText(val: string): string {
 /** Whole calendar days in IST from today to val (negative = past) */
 export function daysFromToday(val: string): number {
   const todayStr = todayISTStr()
-  const valStr = new Date(val).toLocaleDateString('en-CA', { timeZone: TZ })
+  const valStr = toISTDate(val).toLocaleDateString('en-CA', { timeZone: TZ })
   const t = new Date(todayStr + 'T00:00:00').getTime()
   const d = new Date(valStr + 'T00:00:00').getTime()
   return Math.round((d - t) / 86400000)
