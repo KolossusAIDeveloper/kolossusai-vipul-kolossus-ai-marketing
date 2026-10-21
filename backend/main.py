@@ -170,6 +170,12 @@ def get_contacts(
     }
 
 
+@app.get("/api/contacts/by-date")
+def get_contacts_by_date(date: str = Query(..., description="YYYY-MM-DD"), auth=Depends(verify_token)):
+    result = db.get_contacts_by_date(date)
+    return result
+
+
 @app.get("/api/contacts/{contact_id}")
 def get_contact(contact_id: int, auth=Depends(verify_token)):
     row = db.get_user(contact_id)
@@ -225,12 +231,6 @@ def update_followup(followup_id: int, body: dict, auth=Depends(verify_token)):
 def delete_followup(followup_id: int, auth=Depends(verify_token)):
     db.delete_followup(followup_id)
     return {"ok": True}
-
-
-@app.get("/api/contacts/by-date")
-def get_contacts_by_date(date: str = Query(..., description="YYYY-MM-DD"), auth=Depends(verify_token)):
-    result = db.get_contacts_by_date(date)
-    return result
 
 
 @app.post("/api/import")
