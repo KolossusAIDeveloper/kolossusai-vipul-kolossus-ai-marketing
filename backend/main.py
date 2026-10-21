@@ -227,6 +227,12 @@ def delete_followup(followup_id: int, auth=Depends(verify_token)):
     return {"ok": True}
 
 
+@app.get("/api/contacts/by-date")
+def get_contacts_by_date(date: str = Query(..., description="YYYY-MM-DD"), auth=Depends(verify_token)):
+    result = db.get_contacts_by_date(date)
+    return result
+
+
 @app.post("/api/import")
 async def import_file(file: UploadFile = File(...), auth=Depends(verify_token)):
     contents = await file.read()

@@ -44,6 +44,12 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             Contacts
           </NavLink>
           <NavLink
+            to="/daily"
+            className={navClass}
+          >
+            Daily Activity
+          </NavLink>
+          <NavLink
             to="/import"
             className={navClass}
           >

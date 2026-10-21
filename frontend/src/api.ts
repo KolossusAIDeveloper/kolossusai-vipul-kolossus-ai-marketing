@@ -66,6 +66,17 @@ export async function deleteFollowup(id: number) {
   return res.data
 }
 
+export async function getContactsByDate(date: string) {
+  const res = await api.get(`/contacts/by-date?date=${date}`)
+  return res.data as { date: string; count: number; contacts: DailyContact[] }
+}
+
+interface DailyContact {
+  id: number; full_name: string; company?: string; mobile?: string
+  designation?: string; city?: string; sector?: string; current_status: string
+  followup_at: string; channel: string; contacted_by: string; our_notes?: string
+}
+
 export async function importExcel(file: File) {
   const form = new FormData()
   form.append('file', file)

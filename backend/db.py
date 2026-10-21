@@ -617,3 +617,33 @@ def fmt_date(val):
             return d.strftime("%d-%m-%Y")
     except Exception:
         return str(val)
+
+
+def get_contacts_by_date(date_str: str):
+    """Return contacts who had any outbound follow-up on the given date (YYYY-MM-DD)."""
+    conn = get_conn()
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            """
+            SELECT DISTINCT u.id, u.full_name, u.company, u.mobile, u.designation,
+                   u.city, u.sector, u.current_status,
+                   f.followup_at, f.channel, f.contacted_by, f.our_notes
+            FROM followups f
+            JOIN users u ON u.id = f.user_id
+            WHERE f.followup_at::date = %s
+              AND f.direction = 'Outbound'
+            ORDER BY f.followup_at DESC
+            """,
+            (date_str,),
+        )
+        rows = cur.fetchall()
+        cur.execute(
+            "SELECT COUNT(DISTINCT user_id) FROM followups WHERE followup_at::date = %s AND direction = 'Outbound'",
+            (date_str,),
+        )
+        count = cur.fetchone()["count"]
+        cur.close()
+    finally:
+        conn.close()
+    return {"date": date_str, "count": count, "contacts": [dict(r) for r in rows]}

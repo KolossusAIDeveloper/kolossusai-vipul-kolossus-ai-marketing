@@ -6,6 +6,7 @@ import Dashboard from './pages/Dashboard'
 import Contacts from './pages/Contacts'
 import ContactDetail from './pages/ContactDetail'
 import ImportPage from './pages/ImportPage'
+import DailyActivity from './pages/DailyActivity'
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const token = localStorage.getItem('token')
@@ -38,6 +39,7 @@ export default function App() {
                   <Route path="/" element={<Dashboard />} />
                   <Route path="/contacts" element={<Contacts />} />
                   <Route path="/contacts/:id" element={<ContactDetail />} />
+                  <Route path="/daily" element={<DailyActivity />} />
                   <Route path="/import" element={<ImportPage />} />
                 </Routes>
               </Layout>
