@@ -2,22 +2,7 @@ import React, { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { getContactsByDate } from '../api'
 import StatusBadge from '../components/StatusBadge'
-
-function toInputDate(d: Date) {
-  return d.toISOString().slice(0, 10)
-}
-
-function fmtDateTime(val: string | null | undefined) {
-  if (!val) return ''
-  try {
-    const d = new Date(val)
-    const day = String(d.getDate()).padStart(2, '0')
-    const mon = String(d.getMonth() + 1).padStart(2, '0')
-    const hrs = String(d.getHours()).padStart(2, '0')
-    const min = String(d.getMinutes()).padStart(2, '0')
-    return `${day}-${mon}-${d.getFullYear()} ${hrs}:${min}`
-  } catch { return val ?? '' }
-}
+import { fmtDateTime, todayISTStr } from '../utils/ist'
 
 interface DailyContact {
   id: number; full_name: string; company?: string; mobile?: string
@@ -27,7 +12,7 @@ interface DailyContact {
 
 export default function DailyActivity() {
   const navigate = useNavigate()
-  const today = toInputDate(new Date())
+  const today = todayISTStr()
   const [date, setDate] = useState(today)
   const [data, setData] = useState<{ count: number; contacts: DailyContact[] } | null>(null)
   const [loading, setLoading] = useState(false)
@@ -43,10 +28,12 @@ export default function DailyActivity() {
 
   function goToday() { setDate(today) }
   function goYesterday() {
-    const d = new Date(); d.setDate(d.getDate() - 1); setDate(toInputDate(d))
+    const d = new Date(today + 'T00:00:00'); d.setDate(d.getDate() - 1)
+    setDate(d.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }))
   }
   function shift(delta: number) {
-    const d = new Date(date + 'T00:00:00'); d.setDate(d.getDate() + delta); setDate(toInputDate(d))
+    const d = new Date(date + 'T00:00:00'); d.setDate(d.getDate() + delta)
+    setDate(d.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }))
   }
 
   return (

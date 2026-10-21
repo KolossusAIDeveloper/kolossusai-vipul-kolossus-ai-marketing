@@ -3,18 +3,10 @@ import { useNavigate, useLocation } from 'react-router-dom'
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, LabelList
 } from 'recharts'
+import { fmtDate } from '../utils/ist'
 import { getStats } from '../api'
 import StatusBadge, { STATUS_COLORS } from '../components/StatusBadge'
 
-function fmtDate(val: string | null | undefined) {
-  if (!val) return ''
-  try {
-    const d = new Date(val)
-    const day = String(d.getDate()).padStart(2, '0')
-    const mon = String(d.getMonth() + 1).padStart(2, '0')
-    return `${day}-${mon}-${d.getFullYear()}`
-  } catch { return val ?? '' }
-}
 
 interface KPIs {
   total: number

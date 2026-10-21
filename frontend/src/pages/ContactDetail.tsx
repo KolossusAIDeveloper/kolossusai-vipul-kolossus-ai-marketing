@@ -4,6 +4,7 @@ import { getContact, updateContact, getFollowups, addFollowup, updateFollowup, d
 import StatusBadge from '../components/StatusBadge'
 import FormField, { FieldIcon, FieldStatus } from '../components/FormField'
 import ProfileTile from '../components/ProfileTile'
+import { fmtDate, fmtDateTime, fmtNice, nowIST, daysFromToday, lastContactText, nextDue } from '../utils/ist'
 
 const STATUSES = [
   "New","Attempted - No Answer","Contacted","Interested","Follow-up Scheduled",
@@ -20,66 +21,8 @@ function apiError(e: unknown, fallback: string) {
   return typeof detail === 'string' ? detail : fallback
 }
 
-// Current local time as "YYYY-MM-DDTHH:MM" for datetime-local inputs (toISOString() would give UTC)
-function nowLocal() {
-  const d = new Date()
-  return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16)
-}
-
-function fmtDate(val: string | null | undefined) {
-  if (!val) return ''
-  try {
-    const d = new Date(val)
-    const day = String(d.getDate()).padStart(2, '0')
-    const mon = String(d.getMonth() + 1).padStart(2, '0')
-    const yr = d.getFullYear()
-    return `${day}-${mon}-${yr}`
-  } catch { return val ?? '' }
-}
-
-function fmtDateTime(val: string | null | undefined) {
-  if (!val) return ''
-  try {
-    const d = new Date(val)
-    const day = String(d.getDate()).padStart(2, '0')
-    const mon = String(d.getMonth() + 1).padStart(2, '0')
-    const yr = d.getFullYear()
-    let h = d.getHours()
-    const m = String(d.getMinutes()).padStart(2, '0')
-    const ampm = h >= 12 ? 'PM' : 'AM'
-    h = h % 12 || 12
-    return `${day}-${mon}-${yr} ${h}:${m} ${ampm}`
-  } catch { return val ?? '' }
-}
-
-// Whole calendar days from today to the given date (negative = past)
-function daysFromToday(val: string) {
-  const d = new Date(val); d.setHours(0, 0, 0, 0)
-  const t = new Date(); t.setHours(0, 0, 0, 0)
-  return Math.round((d.getTime() - t.getTime()) / 86400000)
-}
-
-// e.g. "09 Oct 2026, 2:30 PM"
-function fmtNice(val: string) {
-  const d = new Date(val)
-  return d.toLocaleString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true })
-    .replace(' am', ' AM').replace(' pm', ' PM').replace('Sept', 'Sep')
-}
-
-function lastContactText(val: string) {
-  const n = -daysFromToday(val)
-  return n <= 0 ? 'Today' : n === 1 ? 'Yesterday' : `${n} days ago`
-}
 
 // Label + colour for the next follow-up pill
-function nextDue(val: string | null | undefined, status: string): { text: string; tone: string } {
-  if (CLOSED.has(status)) return { text: 'Closed', tone: 'none' }
-  if (!val) return { text: 'Not scheduled', tone: 'none' }
-  const n = daysFromToday(val)
-  if (n < 0) return { text: `Overdue by ${-n} day${n === -1 ? '' : 's'}`, tone: 'overdue' }
-  if (n === 0) return { text: 'Due today', tone: 'today' }
-  return { text: n === 1 ? 'Tomorrow' : `In ${n} days`, tone: 'upcoming' }
-}
 
 const CHANNEL_ICONS: Record<string, string> = {
   Call: '📞', WhatsApp: '💬', Email: '✉️', SMS: '💬', Meeting: '🤝',
@@ -148,7 +91,7 @@ export default function ContactDetail() {
   const [saving, setSaving] = useState(false)
   const [showAddFollowup, setShowAddFollowup] = useState(true)
   const [fpData, setFpData] = useState({
-    followup_at: nowLocal(),
+    followup_at: nowIST(),
     channel: 'Call',
     direction: 'Outbound',
     call_result: '',
@@ -204,11 +147,11 @@ export default function ContactDetail() {
     if (!fpData.contacted_by) return 'Contacted by is required'
     if (['Connected', 'Replied'].includes(fpData.call_result) && !fpData.customer_said) return 'Customer said is required when Connected/Replied'
     if (!fpData.followup_at) return 'Date & Time is required'
-    if (fpData.followup_at > nowLocal()) return 'Date & Time cannot be in the future'
+    if (fpData.followup_at > nowIST()) return 'Date & Time cannot be in the future'
     // Next follow-up is optional; if set it must be after the follow-up and after now
     if (!CLOSED.has(fpData.status_after) && fpData.next_followup_at) {
       if (fpData.next_followup_at <= fpData.followup_at) return 'Next follow-up must be after the follow-up Date & Time'
-      if (fpData.next_followup_at <= nowLocal()) return 'Next follow-up must be after the current date and time'
+      if (fpData.next_followup_at <= nowIST()) return 'Next follow-up must be after the current date and time'
     }
     return ''
   }
@@ -233,7 +176,7 @@ export default function ContactDetail() {
       setFpTried(false)
       setFpData(prev => ({
         ...prev,
-        followup_at: nowLocal(),
+        followup_at: nowIST(),
         channel: 'Call',
         direction: 'Outbound',
         call_result: '',
@@ -268,7 +211,7 @@ export default function ContactDetail() {
   async function saveEditFollowup(fid: number) {
     if (editFpData.followup_at !== undefined) {
       if (!editFpData.followup_at) { window.alert('Date & Time is required'); return }
-      if (editFpData.followup_at > nowLocal()) { window.alert('Date & Time cannot be in the future'); return }
+      if (editFpData.followup_at > nowIST()) { window.alert('Date & Time cannot be in the future'); return }
     }
     try {
       await updateFollowup(fid, editFpData)
@@ -282,7 +225,7 @@ export default function ContactDetail() {
   }
 
   // ✓ / ✕ for each follow-up field (same rules as validateFollowup)
-  const nowStr = nowLocal()
+  const nowStr = nowIST()
   const nextLocked = !fpData.followup_at || CLOSED.has(fpData.status_after)
   const needSaid = ['Connected', 'Replied'].includes(fpData.call_result)
   function mark(required: boolean, filled: boolean, valid = true): FieldStatus {
@@ -515,7 +458,7 @@ export default function ContactDetail() {
               <div className="space-y-3 text-sm">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   <FormField icon="calendar" label="Date & Time" htmlFor="fu-at" required status={fs.followup_at}>
-                    <input id="fu-at" type="datetime-local" max={nowLocal()} value={fpData.followup_at} onChange={e => setFpData(p => ({ ...p, followup_at: e.target.value, next_followup_at: e.target.value ? p.next_followup_at : '' }))} className="fu-control" />
+                    <input id="fu-at" type="datetime-local" max={nowIST()} value={fpData.followup_at} onChange={e => setFpData(p => ({ ...p, followup_at: e.target.value, next_followup_at: e.target.value ? p.next_followup_at : '' }))} className="fu-control" />
                   </FormField>
                   <FormField icon="chat" label="Channel" htmlFor="fu-channel" required status={fs.channel}>
                     <select id="fu-channel" value={fpData.channel} onChange={e => setFpData(p => ({ ...p, channel: e.target.value }))} className="fu-control">
@@ -574,7 +517,7 @@ export default function ContactDetail() {
                       id="fu-next"
                       type="datetime-local"
                       disabled={nextLocked}
-                      min={nowLocal()}
+                      min={nowIST()}
                       value={fpData.next_followup_at}
                       onChange={e => setFpData(p => ({ ...p, next_followup_at: e.target.value }))}
                       className="fu-control"
@@ -613,7 +556,7 @@ export default function ContactDetail() {
                     <div className="pf-edit space-y-3 text-sm">
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                         <FormField icon="calendar" label="Date & Time" htmlFor={`fh-at-${f.id}`}>
-                          <input id={`fh-at-${f.id}`} type="datetime-local" max={nowLocal()} defaultValue={f.followup_at?.slice(0,16)} onChange={e => setEditFpData(p => ({ ...p, followup_at: e.target.value }))} className="fu-control" />
+                          <input id={`fh-at-${f.id}`} type="datetime-local" max={nowIST()} defaultValue={f.followup_at?.slice(0,16)} onChange={e => setEditFpData(p => ({ ...p, followup_at: e.target.value }))} className="fu-control" />
                         </FormField>
                         <FormField icon="chat" label="Channel" htmlFor={`fh-channel-${f.id}`}>
                           <select id={`fh-channel-${f.id}`} defaultValue={f.channel} onChange={e => setEditFpData(p => ({ ...p, channel: e.target.value }))} className="fu-control">

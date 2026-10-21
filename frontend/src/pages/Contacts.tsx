@@ -2,6 +2,7 @@ import React, { useEffect, useState, useCallback, useRef } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { getContacts, getStats } from '../api'
 import StatusBadge, { STATUS_COLORS } from '../components/StatusBadge'
+import { fmtDate, isOverdue } from '../utils/ist'
 
 const STATUSES = [
   "New","Attempted - No Answer","Contacted","Interested","Follow-up Scheduled",
@@ -9,22 +10,6 @@ const STATUSES = [
   "Invalid / Wrong Number","Do Not Contact"
 ]
 
-function fmtDate(val: string | null | undefined) {
-  if (!val) return ''
-  try {
-    const d = new Date(val)
-    const day = String(d.getDate()).padStart(2, '0')
-    const mon = String(d.getMonth() + 1).padStart(2, '0')
-    return `${day}-${mon}-${d.getFullYear()}`
-  } catch { return val ?? '' }
-}
-
-function isOverdue(val: string | null | undefined, status: string) {
-  if (!val) return false
-  const closed = new Set(["Converted","Not Interested","Invalid / Wrong Number","Do Not Contact"])
-  if (closed.has(status)) return false
-  return new Date(val) < new Date(new Date().toDateString())
-}
 
 interface Contact {
   id: number; sr_no: number; full_name: string; designation?: string; company?: string
