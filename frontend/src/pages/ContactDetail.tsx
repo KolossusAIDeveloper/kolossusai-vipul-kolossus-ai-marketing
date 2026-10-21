@@ -4,7 +4,18 @@ import { getContact, updateContact, getFollowups, addFollowup, updateFollowup, d
 import StatusBadge from '../components/StatusBadge'
 import FormField, { FieldIcon, FieldStatus } from '../components/FormField'
 import ProfileTile from '../components/ProfileTile'
-import { fmtDate, fmtDateTime, fmtNice, nowIST, daysFromToday, lastContactText, nextDue } from '../utils/ist'
+import { fmtDate, fmtDateTime, fmtNice, nowIST, daysFromToday, lastContactText, nextDue, istLocalToUTC, parseUTC } from '../utils/ist'
+import ISTDateTimePicker from '../components/ISTDateTimePicker'
+
+// Convert a UTC DB timestamp to "YYYY-MM-DDTHH:MM" IST local string for picker default
+function utcToISTLocal(s: string | null | undefined): string {
+  if (!s) return ''
+  const d = parseUTC(s)
+  if (!d) return ''
+  const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000
+  const ist = new Date(d.getTime() + IST_OFFSET_MS)
+  return ist.toISOString().slice(0, 16)
+}
 
 const STATUSES = [
   "New","Attempted - No Answer","Contacted","Interested","Follow-up Scheduled",
@@ -164,9 +175,10 @@ export default function ContactDetail() {
     try {
       await addFollowup(Number(id), {
         ...fpData,
+        followup_at: istLocalToUTC(fpData.followup_at),
         duration_min: fpData.duration_min ? Number(fpData.duration_min) : null,
         call_result: fpData.call_result || null,
-        next_followup_at: CLOSED.has(fpData.status_after) ? null : (fpData.next_followup_at || null),
+        next_followup_at: CLOSED.has(fpData.status_after) ? null : (fpData.next_followup_at ? istLocalToUTC(fpData.next_followup_at) : null),
         status_before: contact?.current_status,
       })
       const [c, f] = await Promise.all([getContact(Number(id)), getFollowups(Number(id))])
@@ -214,7 +226,10 @@ export default function ContactDetail() {
       if (editFpData.followup_at > nowIST()) { window.alert('Date & Time cannot be in the future'); return }
     }
     try {
-      await updateFollowup(fid, editFpData)
+      const payload: Record<string, string | null> = { ...editFpData }
+      if (editFpData.followup_at) payload.followup_at = istLocalToUTC(editFpData.followup_at)
+      if (editFpData.next_followup_at) payload.next_followup_at = istLocalToUTC(editFpData.next_followup_at)
+      await updateFollowup(fid, payload)
       const [c, f] = await Promise.all([getContact(Number(id)), getFollowups(Number(id))])
       setContact(c)
       setFollowups(f)
@@ -458,7 +473,12 @@ export default function ContactDetail() {
               <div className="space-y-3 text-sm">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   <FormField icon="calendar" label="Date & Time" htmlFor="fu-at" required status={fs.followup_at}>
-                    <input id="fu-at" type="datetime-local" max={nowIST()} value={fpData.followup_at} onChange={e => setFpData(p => ({ ...p, followup_at: e.target.value, next_followup_at: e.target.value ? p.next_followup_at : '' }))} className="fu-control" />
+                    <ISTDateTimePicker
+                      id="fu-at"
+                      value={fpData.followup_at}
+                      maxDate={nowIST().slice(0, 10)}
+                      onChange={val => setFpData(p => ({ ...p, followup_at: val, next_followup_at: val ? p.next_followup_at : '' }))}
+                    />
                   </FormField>
                   <FormField icon="chat" label="Channel" htmlFor="fu-channel" required status={fs.channel}>
                     <select id="fu-channel" value={fpData.channel} onChange={e => setFpData(p => ({ ...p, channel: e.target.value }))} className="fu-control">
@@ -513,14 +533,12 @@ export default function ContactDetail() {
                       ? `No next follow-up for "${fpData.status_after}"`
                       : !fpData.followup_at ? 'Fill in Date & Time first' : undefined}
                   >
-                    <input
+                    <ISTDateTimePicker
                       id="fu-next"
-                      type="datetime-local"
-                      disabled={nextLocked}
-                      min={nowIST()}
                       value={fpData.next_followup_at}
-                      onChange={e => setFpData(p => ({ ...p, next_followup_at: e.target.value }))}
-                      className="fu-control"
+                      minDate={nowIST().slice(0, 10)}
+                      disabled={nextLocked}
+                      onChange={val => setFpData(p => ({ ...p, next_followup_at: val }))}
                     />
                   </FormField>
                 </div>
@@ -556,7 +574,12 @@ export default function ContactDetail() {
                     <div className="pf-edit space-y-3 text-sm">
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                         <FormField icon="calendar" label="Date & Time" htmlFor={`fh-at-${f.id}`}>
-                          <input id={`fh-at-${f.id}`} type="datetime-local" max={nowIST()} defaultValue={f.followup_at?.slice(0,16)} onChange={e => setEditFpData(p => ({ ...p, followup_at: e.target.value }))} className="fu-control" />
+                          <ISTDateTimePicker
+                            id={`fh-at-${f.id}`}
+                            value={editFpData.followup_at !== undefined ? editFpData.followup_at : utcToISTLocal(f.followup_at)}
+                            maxDate={nowIST().slice(0, 10)}
+                            onChange={val => setEditFpData(p => ({ ...p, followup_at: val }))}
+                          />
                         </FormField>
                         <FormField icon="chat" label="Channel" htmlFor={`fh-channel-${f.id}`}>
                           <select id={`fh-channel-${f.id}`} defaultValue={f.channel} onChange={e => setEditFpData(p => ({ ...p, channel: e.target.value }))} className="fu-control">
