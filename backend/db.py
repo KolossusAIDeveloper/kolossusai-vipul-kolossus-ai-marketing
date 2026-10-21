@@ -213,27 +213,34 @@ def get_status_counts():
 
 
 def get_kpis():
-    today = datetime.date.today().isoformat()
-    # "This week" = Monday of current ISO week through today
-    today_dt = datetime.date.today()
+    import pytz
+    ist = pytz.timezone('Asia/Kolkata')
+    today_dt = datetime.datetime.now(ist).date()
+    today = today_dt.isoformat()
     week_start = (today_dt - datetime.timedelta(days=today_dt.weekday())).isoformat()
     conn = get_conn()
     try:
         cur = conn.cursor()
         cur.execute("SELECT COUNT(*) as cnt FROM users")
         total = cur.fetchone()["cnt"]
-        cur.execute("SELECT COUNT(*) as cnt FROM users WHERE next_followup_at::date = %s", (today,))
+        cur.execute(
+            "SELECT COUNT(*) as cnt FROM users WHERE (next_followup_at AT TIME ZONE 'Asia/Kolkata')::date = %s",
+            (today,),
+        )
         due_today = cur.fetchone()["cnt"]
         cur.execute(
             """SELECT COUNT(*) as cnt FROM users
-               WHERE next_followup_at IS NOT NULL AND next_followup_at::date < %s
+               WHERE next_followup_at IS NOT NULL
+               AND (next_followup_at AT TIME ZONE 'Asia/Kolkata')::date < %s
                AND current_status NOT IN ('Converted','Not Interested','Invalid / Wrong Number','Do Not Contact')""",
             (today,),
         )
         overdue = cur.fetchone()["cnt"]
-        # "Contacted this week" = had a follow-up logged since Monday of this week
+        # "Contacted this week" = had a follow-up logged since Monday of this week (IST)
         cur.execute(
-            "SELECT COUNT(*) as cnt FROM users WHERE last_followup_at::date >= %s AND last_followup_at::date <= %s",
+            """SELECT COUNT(*) as cnt FROM users
+               WHERE (last_followup_at AT TIME ZONE 'Asia/Kolkata')::date >= %s
+               AND (last_followup_at AT TIME ZONE 'Asia/Kolkata')::date <= %s""",
             (week_start, today),
         )
         contacted_week = cur.fetchone()["cnt"]
@@ -299,7 +306,8 @@ def get_users(
     id_search=None, page=1, page_size=100, last_followup_filter=None,
     sort_by="id", sort_dir="desc",
 ):
-    today_dt = datetime.date.today()
+    import pytz
+    today_dt = datetime.datetime.now(pytz.timezone('Asia/Kolkata')).date()
     today = today_dt.isoformat()
     week_start = (today_dt - datetime.timedelta(days=today_dt.weekday())).isoformat()
     week_end = (today_dt + datetime.timedelta(days=7)).isoformat()
@@ -341,35 +349,37 @@ def get_users(
         params.extend([s, s, s, s])
 
     if next_followup_filter == "Overdue":
-        # Same definition as the Overdue KPI card: closed contacts are excluded
         wheres.append(
-            "next_followup_at IS NOT NULL AND next_followup_at::date < %s "
+            "next_followup_at IS NOT NULL AND (next_followup_at AT TIME ZONE 'Asia/Kolkata')::date < %s "
             "AND current_status NOT IN ('Converted','Not Interested','Invalid / Wrong Number','Do Not Contact')"
         )
         params.append(today)
     elif next_followup_filter == "Today":
-        wheres.append("next_followup_at::date = %s")
+        wheres.append("(next_followup_at AT TIME ZONE 'Asia/Kolkata')::date = %s")
         params.append(today)
     elif next_followup_filter == "This week":
-        wheres.append("next_followup_at::date BETWEEN %s AND %s")
+        wheres.append("(next_followup_at AT TIME ZONE 'Asia/Kolkata')::date BETWEEN %s AND %s")
         params.extend([today, week_end])
     elif next_followup_filter == "Not scheduled":
         wheres.append("next_followup_at IS NULL")
 
     if last_followup_filter == "This week":
-        wheres.append("last_followup_at::date >= %s AND last_followup_at::date <= %s")
+        wheres.append(
+            "(last_followup_at AT TIME ZONE 'Asia/Kolkata')::date >= %s "
+            "AND (last_followup_at AT TIME ZONE 'Asia/Kolkata')::date <= %s"
+        )
         params.extend([week_start, today])
     elif last_followup_filter == "Today":
-        wheres.append("last_followup_at::date = %s")
+        wheres.append("(last_followup_at AT TIME ZONE 'Asia/Kolkata')::date = %s")
         params.append(today)
     elif last_followup_filter == "Never":
         wheres.append("last_followup_at IS NULL")
 
     if last_followup_from:
-        wheres.append("last_followup_at::date >= %s")
+        wheres.append("(last_followup_at AT TIME ZONE 'Asia/Kolkata')::date >= %s")
         params.append(str(last_followup_from))
     if last_followup_to:
-        wheres.append("last_followup_at::date <= %s")
+        wheres.append("(last_followup_at AT TIME ZONE 'Asia/Kolkata')::date <= %s")
         params.append(str(last_followup_to))
 
     def multi(col, vals):
@@ -626,20 +636,21 @@ def get_contacts_by_date(date_str: str):
         cur = conn.cursor()
         cur.execute(
             """
-            SELECT DISTINCT u.id, u.full_name, u.company, u.mobile, u.designation,
+            SELECT DISTINCT ON (f.id) u.id, u.full_name, u.company, u.mobile, u.designation,
                    u.city, u.sector, u.current_status,
                    f.followup_at, f.channel, f.contacted_by, f.our_notes
             FROM followups f
             JOIN users u ON u.id = f.user_id
-            WHERE f.followup_at::date = %s
+            WHERE (f.followup_at AT TIME ZONE 'Asia/Kolkata')::date = %s
               AND f.direction = 'Outbound'
-            ORDER BY f.followup_at DESC
+            ORDER BY f.id, f.followup_at DESC
             """,
             (date_str,),
         )
         rows = cur.fetchall()
         cur.execute(
-            "SELECT COUNT(DISTINCT user_id) FROM followups WHERE followup_at::date = %s AND direction = 'Outbound'",
+            """SELECT COUNT(DISTINCT user_id) FROM followups
+               WHERE (followup_at AT TIME ZONE 'Asia/Kolkata')::date = %s AND direction = 'Outbound'""",
             (date_str,),
         )
         count = cur.fetchone()["count"]
