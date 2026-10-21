@@ -66,9 +66,10 @@ export function fmtNice(val: string | null | undefined): string {
 /** Convert IST datetime-local string ("YYYY-MM-DDTHH:MM") to UTC ISO string for API */
 export function istLocalToUTC(s: string): string {
   if (!s) return s
-  // s is IST wall-clock time; subtract 5:30 to get UTC
-  const istMs = new Date(s + ':00').getTime() // parsed as if local, but we treat it as UTC reference
-  const utcMs = istMs - IST_OFFSET_MS
+  // s is IST wall-clock time; parse it as if it were UTC (append Z so browsers don't apply local TZ),
+  // then subtract 5:30 to get the true UTC instant.
+  const parsedAsUTC = new Date(s + ':00Z').getTime()
+  const utcMs = parsedAsUTC - IST_OFFSET_MS
   return new Date(utcMs).toISOString()
 }
 
