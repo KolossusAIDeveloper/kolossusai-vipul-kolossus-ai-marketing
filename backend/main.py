@@ -76,8 +76,13 @@ def login(req: LoginRequest):
     app_user = os.environ.get("APP_USER", "admin")
     app_pass = os.environ.get("USER_PASSWORD") or os.environ.get("APP_PASSWORD", "")
     if req.username == app_user and req.password == app_pass and app_pass:
-        return {"token": STATIC_TOKEN}
+        return {"token": STATIC_TOKEN, "username": app_user}
     raise HTTPException(status_code=401, detail="Invalid credentials")
+
+
+@app.get("/api/me")
+def me(auth=Depends(verify_token)):
+    return {"username": os.environ.get("APP_USER", "admin")}
 
 
 @app.get("/api/health")
@@ -131,7 +136,7 @@ def get_contacts(
     last_channels: Optional[str] = Query(None),
     id_search: Optional[str] = Query(None),
     last_followup_filter: Optional[str] = Query(None),
-    sort_by: Optional[str] = Query("id"),
+    sort_by: Optional[str] = Query("default"),
     sort_dir: Optional[str] = Query("desc"),
     page: int = Query(1, ge=1),
     page_size: int = Query(100, ge=1, le=500),
@@ -157,7 +162,7 @@ def get_contacts(
         last_channels=split(last_channels),
         id_search=id_search,
         last_followup_filter=last_followup_filter,
-        sort_by=sort_by or "id",
+        sort_by=sort_by or "default",
         sort_dir=sort_dir or "desc",
         page=page,
         page_size=page_size,
@@ -171,9 +176,21 @@ def get_contacts(
 
 
 @app.get("/api/contacts/by-date")
-def get_contacts_by_date(date: str = Query(..., description="YYYY-MM-DD"), auth=Depends(verify_token)):
-    result = db.get_contacts_by_date(date)
+def get_contacts_by_date(
+    date: str = Query(..., description="YYYY-MM-DD"),
+    end: Optional[str] = Query(None, description="YYYY-MM-DD, inclusive; omit for a single day"),
+    auth=Depends(verify_token),
+):
+    result = db.get_contacts_by_date(date, end)
     return result
+
+
+@app.post("/api/contacts", status_code=201)
+def create_contact(body: dict, auth=Depends(verify_token)):
+    if not str(body.get("full_name") or "").strip():
+        raise HTTPException(status_code=400, detail="Full Name is required")
+    new_id = db.create_user(**body)
+    return _serialize_dict(db.get_user(new_id))
 
 
 @app.get("/api/contacts/{contact_id}")
@@ -191,6 +208,26 @@ def update_contact(contact_id: int, body: dict, auth=Depends(verify_token)):
     if not row:
         raise HTTPException(status_code=404, detail="Contact not found")
     return _serialize_dict(row)
+
+
+class BulkDeleteRequest(BaseModel):
+    ids: List[int]
+
+
+@app.post("/api/contacts/bulk-delete")
+def bulk_delete_contacts(req: BulkDeleteRequest, auth=Depends(verify_token)):
+    if not req.ids:
+        raise HTTPException(status_code=400, detail="No contacts selected")
+    if len(req.ids) > 1000:
+        raise HTTPException(status_code=400, detail="Delete at most 1000 contacts at a time")
+    return {"deleted": db.delete_users(req.ids)}
+
+
+@app.delete("/api/contacts/{contact_id}")
+def delete_contact(contact_id: int, auth=Depends(verify_token)):
+    if not db.delete_user(contact_id):
+        raise HTTPException(status_code=404, detail="Contact not found")
+    return {"deleted": contact_id}
 
 
 @app.get("/api/contacts/{contact_id}/followups")

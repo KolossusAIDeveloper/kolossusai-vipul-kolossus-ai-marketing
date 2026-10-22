@@ -1,7 +1,10 @@
 import React, { useEffect, useState } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import { getContact, updateContact, getFollowups, addFollowup, updateFollowup, deleteFollowup } from '../api'
-import StatusBadge from '../components/StatusBadge'
+import { useToast } from '../components/Toast'
+import ConfirmDialog from '../components/ConfirmDialog'
+import StatusBadge, { STATUS_COLORS } from '../components/StatusBadge'
+import Select, { opts } from '../components/Select'
 import FormField, { FieldIcon, FieldStatus } from '../components/FormField'
 import ProfileTile from '../components/ProfileTile'
 import { fmtDate, fmtDateTime, fmtNice, nowIST, daysFromToday, lastContactText, nextDue, istLocalToUTC, parseUTC } from '../utils/ist'
@@ -97,7 +100,9 @@ export default function ContactDetail() {
   const [followups, setFollowups] = useState<Followup[]>([])
   const [loading, setLoading] = useState(true)
   const [showAadhaar, setShowAadhaar] = useState(false)
-  const [editMode, setEditMode] = useState(false)
+  // ?edit=1 (the Contacts row menu's "Edit") opens the profile form straight away
+  const [searchParams] = useSearchParams()
+  const [editMode, setEditMode] = useState(searchParams.get('edit') === '1')
   const [editData, setEditData] = useState<Partial<Contact>>({})
   const [saving, setSaving] = useState(false)
   const [showAddFollowup, setShowAddFollowup] = useState(true)
@@ -116,6 +121,10 @@ export default function ContactDetail() {
     next_followup_at: '',
   })
   const [fpError, setFpError] = useState('')
+  const toast = useToast()
+  // Follow-up waiting for the user to confirm its deletion
+  const [pendingDelete, setPendingDelete] = useState<Followup | null>(null)
+  const [deleting, setDeleting] = useState(false)
   const [fpTried, setFpTried] = useState(false)
   const [fpSaving, setFpSaving] = useState(false)
   const [editFollowupId, setEditFollowupId] = useState<number | null>(null)
@@ -145,8 +154,9 @@ export default function ContactDetail() {
       const updated = await updateContact(contact.id, editData)
       setContact(updated)
       setEditMode(false)
+      toast.success('Details saved', `${updated.full_name}'s profile was updated.`)
     } catch (e) {
-      window.alert(apiError(e, 'Could not save changes. Please try again.'))
+      toast.error('Details not saved', apiError(e, 'Could not save changes. Please try again.'))
     } finally {
       setSaving(false)
     }
@@ -169,7 +179,7 @@ export default function ContactDetail() {
 
   async function submitFollowup() {
     const err = validateFollowup()
-    if (err) { setFpError(err); setFpTried(true); return }
+    if (err) { setFpError(err); setFpTried(true); toast.error('Follow-up not saved', err); return }
     setFpError('')
     setFpSaving(true)
     try {
@@ -184,6 +194,7 @@ export default function ContactDetail() {
       const [c, f] = await Promise.all([getContact(Number(id)), getFollowups(Number(id))])
       setContact(c)
       setFollowups(f)
+      toast.success('Follow-up added', `${fpData.channel} logged · status is now ${c.current_status}.`)
       setShowAddFollowup(true)
       setFpTried(false)
       setFpData(prev => ({
@@ -203,27 +214,32 @@ export default function ContactDetail() {
       }))
     } catch (e) {
       setFpError(apiError(e, 'Could not save the follow-up. Please try again.'))
+      toast.error('Follow-up not saved', apiError(e, 'Could not save the follow-up. Please try again.'))
     } finally {
       setFpSaving(false)
     }
   }
 
   async function handleDeleteFollowup(fid: number) {
-    if (!window.confirm('Delete this follow-up entry?')) return
+    setDeleting(true)
     try {
       await deleteFollowup(fid)
       const [c, f] = await Promise.all([getContact(Number(id)), getFollowups(Number(id))])
       setContact(c)
       setFollowups(f)
+      toast.success('Follow-up deleted')
     } catch (e) {
-      window.alert(apiError(e, 'Could not delete the follow-up. Please try again.'))
+      toast.error('Follow-up not deleted', apiError(e, 'Could not delete the follow-up. Please try again.'))
+    } finally {
+      setDeleting(false)
+      setPendingDelete(null)
     }
   }
 
   async function saveEditFollowup(fid: number) {
     if (editFpData.followup_at !== undefined) {
-      if (!editFpData.followup_at) { window.alert('Date & Time is required'); return }
-      if (editFpData.followup_at > nowIST()) { window.alert('Date & Time cannot be in the future'); return }
+      if (!editFpData.followup_at) { toast.error('Follow-up not updated', 'Date & Time is required'); return }
+      if (editFpData.followup_at > nowIST()) { toast.error('Follow-up not updated', 'Date & Time cannot be in the future'); return }
     }
     try {
       const payload: Record<string, string | null> = { ...editFpData }
@@ -234,8 +250,9 @@ export default function ContactDetail() {
       setContact(c)
       setFollowups(f)
       setEditFollowupId(null)
+      toast.success('Follow-up updated', `Status is now ${c.current_status}.`)
     } catch (e) {
-      window.alert(apiError(e, 'Could not save the follow-up. Please try again.'))
+      toast.error('Follow-up not updated', apiError(e, 'Could not save the follow-up. Please try again.'))
     }
   }
 
@@ -267,10 +284,10 @@ export default function ContactDetail() {
   if (!contact) return <div className="p-8 text-red-500">Contact not found</div>
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="p-4 md:p-6 space-y-6">
       {/* Header */}
       <div
-        className="name-bar brand-gradient textured flex items-center gap-4 rounded-xl px-5 py-4 shadow text-white"
+        className="name-bar brand-gradient textured flex flex-wrap items-center gap-3 md:gap-4 rounded-xl px-4 md:px-5 py-4 shadow text-white"
         style={{ background: 'linear-gradient(90deg, #4E148C 0%, #02C3BD 100%)' }}
       >
         <button
@@ -281,7 +298,7 @@ export default function ContactDetail() {
         </button>
         <div className="flex-1">
           <div className="flex items-center gap-3 flex-wrap">
-            <h1 className="text-2xl font-bold text-white" style={{ textShadow: '0 1px 2px rgb(0 0 0 / 0.2)' }}>{contact.full_name}</h1>
+            <h1 className="text-xl md:text-2xl font-bold text-white break-words" style={{ textShadow: '0 1px 2px rgb(0 0 0 / 0.2)' }}>{contact.full_name}</h1>
             <StatusBadge status={contact.current_status} />
             {contact.possible_duplicate_of && (
               <span className="text-yellow-800 text-sm bg-white/90 px-2 py-0.5 rounded">
@@ -341,25 +358,20 @@ export default function ContactDetail() {
                 </FormField>
               ))}
               <FormField icon="flag" label="Priority" htmlFor="pf-priority">
-                <select
+                <Select
                   id="pf-priority"
                   defaultValue={contact.priority ?? 'Medium'}
-                  onChange={e => setEditData(prev => ({ ...prev, priority: e.target.value }))}
-                  className="fu-control"
-                >
-                  {['High','Medium','Low'].map(p => <option key={p}>{p}</option>)}
-                </select>
+                  onChange={v => setEditData(prev => ({ ...prev, priority: v }))}
+                  options={opts(['High', 'Medium', 'Low'])}
+                />
               </FormField>
               <FormField icon="fire" label="Interest Level" htmlFor="pf-interest">
-                <select
+                <Select
                   id="pf-interest"
                   defaultValue={contact.interest_level ?? ''}
-                  onChange={e => setEditData(prev => ({ ...prev, interest_level: e.target.value || null } as Partial<Contact>))}
-                  className="fu-control"
-                >
-                  <option value="">None</option>
-                  {['Hot','Warm','Cold'].map(p => <option key={p}>{p}</option>)}
-                </select>
+                  onChange={v => setEditData(prev => ({ ...prev, interest_level: v || null } as Partial<Contact>))}
+                  options={[{ value: '', label: 'None' }, ...opts(['Hot', 'Warm', 'Cold'])]}
+                />
               </FormField>
               <div className="flex justify-center pt-1">
                 <button
@@ -481,21 +493,13 @@ export default function ContactDetail() {
                     />
                   </FormField>
                   <FormField icon="chat" label="Channel" htmlFor="fu-channel" required status={fs.channel}>
-                    <select id="fu-channel" value={fpData.channel} onChange={e => setFpData(p => ({ ...p, channel: e.target.value }))} className="fu-control">
-                      {CHANNELS.map(c => <option key={c}>{c}</option>)}
-                    </select>
+                    <Select id="fu-channel" value={fpData.channel} onChange={v => setFpData(p => ({ ...p, channel: v }))} options={opts(CHANNELS)} />
                   </FormField>
                   <FormField icon="arrows" label="Direction" htmlFor="fu-direction" status={fs.direction}>
-                    <select id="fu-direction" value={fpData.direction} onChange={e => setFpData(p => ({ ...p, direction: e.target.value }))} className="fu-control">
-                      <option>Outbound</option>
-                      <option>Inbound</option>
-                    </select>
+                    <Select id="fu-direction" value={fpData.direction} onChange={v => setFpData(p => ({ ...p, direction: v }))} options={opts(['Outbound', 'Inbound'])} />
                   </FormField>
                   <FormField icon="phone" label="Call Result" htmlFor="fu-result" status={fs.call_result}>
-                    <select id="fu-result" value={fpData.call_result} onChange={e => setFpData(p => ({ ...p, call_result: e.target.value }))} className="fu-control">
-                      <option value="">None</option>
-                      {CALL_RESULTS.map(r => <option key={r}>{r}</option>)}
-                    </select>
+                    <Select id="fu-result" value={fpData.call_result} onChange={v => setFpData(p => ({ ...p, call_result: v }))} options={[{ value: '', label: 'None' }, ...opts(CALL_RESULTS)]} />
                   </FormField>
                   <FormField icon="clock" label="Duration (min)" htmlFor="fu-duration" status={fs.duration_min}>
                     <input id="fu-duration" type="number" min="0" value={fpData.duration_min} onChange={e => setFpData(p => ({ ...p, duration_min: e.target.value }))} className="fu-control" />
@@ -507,10 +511,13 @@ export default function ContactDetail() {
                     <input id="fu-spoke" type="text" value={fpData.spoke_with} onChange={e => setFpData(p => ({ ...p, spoke_with: e.target.value }))} className="fu-control" />
                   </FormField>
                   <FormField icon="flag" label="Status After" htmlFor="fu-status" required status={fs.status_after}>
-                    <select id="fu-status" value={fpData.status_after} onChange={e => setFpData(p => ({ ...p, status_after: e.target.value, next_followup_at: CLOSED.has(e.target.value) ? '' : p.next_followup_at }))} className="fu-control">
-                      <option value="">Select...</option>
-                      {STATUSES.map(s => <option key={s}>{s}</option>)}
-                    </select>
+                    <Select
+                      id="fu-status"
+                      value={fpData.status_after}
+                      onChange={v => setFpData(p => ({ ...p, status_after: v, next_followup_at: CLOSED.has(v) ? '' : p.next_followup_at }))}
+                      placeholder="Select…"
+                      options={STATUSES.map(s => ({ value: s, label: s, color: STATUS_COLORS[s] }))}
+                    />
                   </FormField>
                 </div>
                 <FormField icon="quote" label="Customer Said" htmlFor="fu-said" required={needSaid} status={fs.customer_said}>
@@ -582,15 +589,10 @@ export default function ContactDetail() {
                           />
                         </FormField>
                         <FormField icon="chat" label="Channel" htmlFor={`fh-channel-${f.id}`}>
-                          <select id={`fh-channel-${f.id}`} defaultValue={f.channel} onChange={e => setEditFpData(p => ({ ...p, channel: e.target.value }))} className="fu-control">
-                            {CHANNELS.map(c => <option key={c}>{c}</option>)}
-                          </select>
+                          <Select id={`fh-channel-${f.id}`} defaultValue={f.channel} onChange={v => setEditFpData(p => ({ ...p, channel: v }))} options={opts(CHANNELS)} />
                         </FormField>
                         <FormField icon="phone" label="Call Result" htmlFor={`fh-result-${f.id}`}>
-                          <select id={`fh-result-${f.id}`} defaultValue={f.call_result ?? ''} onChange={e => setEditFpData(p => ({ ...p, call_result: e.target.value }))} className="fu-control">
-                            <option value="">None</option>
-                            {CALL_RESULTS.map(r => <option key={r}>{r}</option>)}
-                          </select>
+                          <Select id={`fh-result-${f.id}`} defaultValue={f.call_result ?? ''} onChange={v => setEditFpData(p => ({ ...p, call_result: v }))} options={[{ value: '', label: 'None' }, ...opts(CALL_RESULTS)]} />
                         </FormField>
                         <FormField icon="user" label="Contacted By" htmlFor={`fh-by-${f.id}`}>
                           <input id={`fh-by-${f.id}`} defaultValue={f.contacted_by} onChange={e => setEditFpData(p => ({ ...p, contacted_by: e.target.value }))} className="fu-control" />
@@ -628,7 +630,7 @@ export default function ContactDetail() {
                             <svg viewBox="0 0 24 24" className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
                             Edit
                           </button>
-                          <button onClick={() => handleDeleteFollowup(f.id)} className="edit-btn is-sm is-danger">
+                          <button onClick={() => setPendingDelete(f)} className="edit-btn is-sm is-danger">
                             <svg viewBox="0 0 24 24" className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
                             Delete
                           </button>
@@ -668,6 +670,19 @@ export default function ContactDetail() {
           </div>
         )}
       </div>
+      <ConfirmDialog
+        open={pendingDelete !== null}
+        title="Delete this follow-up?"
+        message={pendingDelete && (
+          <>
+            <strong>{pendingDelete.channel}</strong> on {fmtNice(pendingDelete.followup_at)} will be removed from the history.
+            The contact's status and dates are recalculated from the remaining follow-ups. This can't be undone.
+          </>
+        )}
+        busy={deleting}
+        onConfirm={() => pendingDelete && handleDeleteFollowup(pendingDelete.id)}
+        onCancel={() => setPendingDelete(null)}
+      />
     </div>
   )
 }

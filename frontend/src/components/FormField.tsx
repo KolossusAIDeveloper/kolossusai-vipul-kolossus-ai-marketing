@@ -28,23 +28,7 @@ const ICONS = {
 export type FieldIcon = keyof typeof ICONS
 export type FieldStatus = 'ok' | 'bad' | null
 
-function StatusMark({ status }: { status: FieldStatus }) {
-  if (status === 'ok') return (
-    <svg viewBox="0 0 24 24" className="w-5 h-5" aria-label="valid">
-      <circle cx="12" cy="12" r="11" fill="#22c55e" />
-      <path d="M7 12.5l3.2 3.2L17 9" fill="none" stroke="#fff" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  )
-  if (status === 'bad') return (
-    <svg viewBox="0 0 24 24" className="w-5 h-5" aria-label="invalid">
-      <circle cx="12" cy="12" r="11" fill="#ef4444" />
-      <path d="M8.5 8.5l7 7M15.5 8.5l-7 7" fill="none" stroke="#fff" strokeWidth="2.6" strokeLinecap="round" />
-    </svg>
-  )
-  return null
-}
-
-// Boxed form field: icon cell | uppercase label + control | ✓ / ✕ status
+// Boxed form field: icon cell | label + control. An invalid field (status 'bad') gets a red border; no ✓ / ✕ marks
 export default function FormField({ icon, label, htmlFor, required, status = null, disabled, title, children }: {
   icon: FieldIcon
   label: string
@@ -66,7 +50,6 @@ export default function FormField({ icon, label, htmlFor, required, status = nul
         <label htmlFor={htmlFor} className="fu-label">{label}{required ? ' *' : ''}</label>
         {children}
       </div>
-      <div className="fu-status"><StatusMark status={status} /></div>
     </div>
   )
 }

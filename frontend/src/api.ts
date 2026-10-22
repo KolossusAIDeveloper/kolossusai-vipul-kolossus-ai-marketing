@@ -15,6 +15,11 @@ export async function login(username: string, password: string) {
   return res.data
 }
 
+export async function getMe() {
+  const res = await api.get('/me')
+  return res.data as { username: string }
+}
+
 export async function getStats() {
   const res = await api.get('/stats')
   return res.data
@@ -34,10 +39,16 @@ interface Contact {
   mobile?: string; email?: string; sector?: string; company_type?: string; msme_type?: string
   city?: string; current_status: string; last_followup_at?: string; last_outcome?: string
   next_followup_at?: string; followup_count: number; assigned_to?: string; possible_duplicate_of?: number
+  serial: number // 1 = oldest contact, counted by date added
 }
 
 export async function getContact(id: number) {
   const res = await api.get(`/contacts/${id}`)
+  return res.data
+}
+
+export async function createContact(data: Record<string, unknown>) {
+  const res = await api.post('/contacts', data)
   return res.data
 }
 
@@ -61,20 +72,31 @@ export async function updateFollowup(id: number, data: Record<string, unknown>) 
   return res.data
 }
 
+export async function deleteContact(id: number) {
+  const res = await api.delete(`/contacts/${id}`)
+  return res.data
+}
+
+export async function deleteContacts(ids: number[]) {
+  const res = await api.post('/contacts/bulk-delete', { ids })
+  return res.data as { deleted: number }
+}
+
 export async function deleteFollowup(id: number) {
   const res = await api.delete(`/followups/${id}`)
   return res.data
 }
 
-export async function getContactsByDate(date: string) {
-  const res = await api.get(`/contacts/by-date?date=${date}`)
-  return res.data as { date: string; count: number; contacts: DailyContact[] }
+export async function getContactsByDate(date: string, end?: string) {
+  const res = await api.get('/contacts/by-date', { params: end ? { date, end } : { date } })
+  return res.data as { date: string; end: string; count: number; contacts: DailyContact[] }
 }
 
 interface DailyContact {
   id: number; full_name: string; company?: string; mobile?: string
   designation?: string; city?: string; sector?: string; current_status: string
   followup_at: string; channel: string; contacted_by: string; our_notes?: string
+  call_result?: string; status_after: string
 }
 
 export async function importExcel(file: File) {
