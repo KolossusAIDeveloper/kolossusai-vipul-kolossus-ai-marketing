@@ -14,3 +14,14 @@ data/*.xlsx
 data/*.xls
 *.xlsx
 *.xls
+
+# Python virtualenv
+.venv/
+venv/
+
+# Frontend
+node_modules/
+frontend/dist/
+
+# Local Postgres (no-sudo dev instance)
+.pgdata/

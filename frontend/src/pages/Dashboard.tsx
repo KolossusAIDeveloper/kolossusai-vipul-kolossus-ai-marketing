@@ -101,15 +101,24 @@ export default function Dashboard() {
     : { label: '#374151', value: '#111827', cursor: 'rgb(139 90 43 / 0.08)', sector: '#8B5A2B' }
 
   return (
-    <div className="dashboard-page p-6 space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-gray-800">Dashboard</h1>
-        <div className="flex gap-2">
+    <div className="dashboard-page p-4 md:p-6 space-y-6">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h1 className="hidden md:block text-2xl font-bold text-gray-800">Dashboard</h1>
+        <div className="flex flex-wrap gap-2">
           <button
             onClick={() => navigate('/contacts')}
             className="btn-brown px-4 py-2 rounded-lg text-sm font-semibold"
           >
             View Contacts
+          </button>
+          <button
+            onClick={() => navigate('/contacts/new')}
+            className="btn-brown inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-semibold"
+          >
+            <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" aria-hidden="true">
+              <path d="M12 5v14M5 12h14" />
+            </svg>
+            Add Contact
           </button>
           <button
             onClick={() => navigate('/import')}

@@ -34,25 +34,15 @@ export default function ISTDateTimePicker({
     }
   }
 
-  const baseStyle: React.CSSProperties = {
-    padding: '8px 12px',
-    borderRadius: 8,
-    border: '1.5px solid #d1d5db',
-    fontSize: 14,
-    color: disabled ? '#9ca3af' : '#111827',
-    background: disabled ? '#f9fafb' : '#fff',
-    cursor: disabled ? 'not-allowed' : 'pointer',
-    outline: 'none',
-  }
-
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
       {label && (
-        <label htmlFor={id} style={{ fontSize: 13, fontWeight: 500, color: '#374151' }}>
+        <label htmlFor={id} className="ist-label">
           {label}{required && ' *'}
         </label>
       )}
-      <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+      {/* Time wraps under the date when the field is too narrow for both */}
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
         <input
           type="date"
           id={id}
@@ -62,8 +52,8 @@ export default function ISTDateTimePicker({
           disabled={disabled}
           onChange={e => { setDate(e.target.value); handleChange(e.target.value, time) }}
           required={required}
-          style={{ ...baseStyle, flex: 1 }}
-          className="fu-control"
+          style={{ flex: '1 1 140px', minWidth: 0 }}
+          className="fu-control ist-input"
         />
         <input
           type="time"
@@ -71,10 +61,10 @@ export default function ISTDateTimePicker({
           disabled={disabled}
           onChange={e => { setTime(e.target.value); handleChange(date, e.target.value) }}
           required={required}
-          style={{ ...baseStyle, width: 120 }}
-          className="fu-control"
+          style={{ flex: '0 0 110px' }}
+          className="fu-control ist-input"
         />
-        <span style={{ fontSize: 12, color: '#6b7280', whiteSpace: 'nowrap' }}>IST</span>
+        <span className="ist-tz">IST</span>
       </div>
     </div>
   )

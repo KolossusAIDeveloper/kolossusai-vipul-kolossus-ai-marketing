@@ -1,6 +1,7 @@
 import React, { useState } from 'react'
 import { useNavigate, useLocation, Navigate } from 'react-router-dom'
 import { login } from '../api'
+import { useToast } from '../components/Toast'
 
 export default function LoginPage() {
   const [username, setUsername] = useState('')
@@ -9,6 +10,7 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false)
   const navigate = useNavigate()
   const location = useLocation()
+  const toast = useToast()
 
   // Already logged in — go straight to the app
   if (localStorage.getItem('token')) {
@@ -23,10 +25,13 @@ export default function LoginPage() {
     try {
       const data = await login(username, password)
       localStorage.setItem('token', data.token)
+      localStorage.setItem('username', data.username ?? username)
+      toast.success(`Welcome back, ${data.username ?? username}`, 'You are logged in.')
       const from = (location.state as any)?.from?.pathname || '/'
       navigate(from, { replace: true })
     } catch {
       setError('Invalid username or password')
+      toast.error('Login failed', 'Invalid username or password.')
     } finally {
       setLoading(false)
     }

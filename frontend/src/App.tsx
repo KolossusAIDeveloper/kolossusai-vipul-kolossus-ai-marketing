@@ -5,8 +5,10 @@ import LoginPage from './pages/LoginPage'
 import Dashboard from './pages/Dashboard'
 import Contacts from './pages/Contacts'
 import ContactDetail from './pages/ContactDetail'
+import AddContact from './pages/AddContact'
 import ImportPage from './pages/ImportPage'
 import DailyActivity from './pages/DailyActivity'
+import { ToastProvider } from './components/Toast'
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const token = localStorage.getItem('token')
@@ -26,6 +28,7 @@ function LegacyContactRedirect() {
 export default function App() {
   return (
     <BrowserRouter>
+      <ToastProvider>
       <Routes>
         <Route path="/login" element={<LoginPage />} />
         {/* Legacy Streamlit URL compatibility */}
@@ -38,6 +41,7 @@ export default function App() {
                 <Routes>
                   <Route path="/" element={<Dashboard />} />
                   <Route path="/contacts" element={<Contacts />} />
+                  <Route path="/contacts/new" element={<AddContact />} />
                   <Route path="/contacts/:id" element={<ContactDetail />} />
                   <Route path="/daily" element={<DailyActivity />} />
                   <Route path="/import" element={<ImportPage />} />
@@ -47,6 +51,7 @@ export default function App() {
           }
         />
       </Routes>
+      </ToastProvider>
     </BrowserRouter>
   )
 }

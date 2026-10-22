@@ -224,14 +224,14 @@ def get_kpis():
         cur.execute("SELECT COUNT(*) as cnt FROM users")
         total = cur.fetchone()["cnt"]
         cur.execute(
-            "SELECT COUNT(*) as cnt FROM users WHERE next_followup_at::date = %s",
+            "SELECT COUNT(*) as cnt FROM users WHERE (next_followup_at AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Kolkata')::date = %s",
             (today,),
         )
         due_today = cur.fetchone()["cnt"]
         cur.execute(
             """SELECT COUNT(*) as cnt FROM users
                WHERE next_followup_at IS NOT NULL
-               AND next_followup_at::date < %s
+               AND (next_followup_at AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Kolkata')::date < %s
                AND current_status NOT IN ('Converted','Not Interested','Invalid / Wrong Number','Do Not Contact')""",
             (today,),
         )
@@ -239,8 +239,8 @@ def get_kpis():
         # "Contacted this week" = had a follow-up logged since Monday of this week (IST)
         cur.execute(
             """SELECT COUNT(*) as cnt FROM users
-               WHERE last_followup_at::date >= %s
-               AND last_followup_at::date <= %s""",
+               WHERE (last_followup_at AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Kolkata')::date >= %s
+               AND (last_followup_at AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Kolkata')::date <= %s""",
             (week_start, today),
         )
         contacted_week = cur.fetchone()["cnt"]
@@ -304,7 +304,7 @@ def get_users(
     designations=None, assigned_tos=None, priorities=None,
     interest_levels=None, last_channels=None, extra_cols=None,
     id_search=None, page=1, page_size=100, last_followup_filter=None,
-    sort_by="id", sort_dir="desc",
+    sort_by="default", sort_dir="desc",
 ):
     import pytz
     today_dt = datetime.datetime.now(pytz.timezone('Asia/Kolkata')).date()
@@ -319,7 +319,7 @@ def get_users(
         "followup_count", "assigned_to", "possible_duplicate_of",
     ]
     hidden_cols = ["social_category", "gender", "udyam_aadhaar", "address"]
-    cols = base_cols + [c for c in (extra_cols or []) if c in hidden_cols]
+    cols = base_cols + [c for c in (extra_cols or []) if c in hidden_cols] + ["serial"]
 
     wheres = []
     params = []
@@ -348,38 +348,40 @@ def get_users(
         s = f"%{escaped}%"
         params.extend([s, s, s, s])
 
+    # Timestamps are stored as naive UTC: compare their IST date, so activity between
+    # 00:00 and 05:30 IST isn't counted on the previous day
     if next_followup_filter == "Overdue":
         wheres.append(
-            "next_followup_at IS NOT NULL AND next_followup_at::date < %s "
+            "next_followup_at IS NOT NULL AND (next_followup_at AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Kolkata')::date < %s "
             "AND current_status NOT IN ('Converted','Not Interested','Invalid / Wrong Number','Do Not Contact')"
         )
         params.append(today)
     elif next_followup_filter == "Today":
-        wheres.append("next_followup_at::date = %s")
+        wheres.append("(next_followup_at AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Kolkata')::date = %s")
         params.append(today)
     elif next_followup_filter == "This week":
-        wheres.append("next_followup_at::date BETWEEN %s AND %s")
+        wheres.append("(next_followup_at AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Kolkata')::date BETWEEN %s AND %s")
         params.extend([today, week_end])
     elif next_followup_filter == "Not scheduled":
         wheres.append("next_followup_at IS NULL")
 
     if last_followup_filter == "This week":
         wheres.append(
-            "last_followup_at::date >= %s "
-            "AND last_followup_at::date <= %s"
+            "(last_followup_at AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Kolkata')::date >= %s "
+            "AND (last_followup_at AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Kolkata')::date <= %s"
         )
         params.extend([week_start, today])
     elif last_followup_filter == "Today":
-        wheres.append("last_followup_at::date = %s")
+        wheres.append("(last_followup_at AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Kolkata')::date = %s")
         params.append(today)
     elif last_followup_filter == "Never":
         wheres.append("last_followup_at IS NULL")
 
     if last_followup_from:
-        wheres.append("last_followup_at::date >= %s")
+        wheres.append("(last_followup_at AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Kolkata')::date >= %s")
         params.append(str(last_followup_from))
     if last_followup_to:
-        wheres.append("last_followup_at::date <= %s")
+        wheres.append("(last_followup_at AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Kolkata')::date <= %s")
         params.append(str(last_followup_to))
 
     def multi(col, vals):
@@ -405,7 +407,7 @@ def get_users(
         "id", "sr_no", "full_name", "company", "mobile", "current_status",
         "last_followup_at", "next_followup_at", "followup_count",
     }
-    safe_sort_by = sort_by if sort_by in ALLOWED_SORT_COLS else "id"
+    safe_sort_by = sort_by if sort_by in ALLOWED_SORT_COLS else "default"
     safe_sort_dir = "DESC" if str(sort_dir).lower() == "desc" else "ASC"
 
     conn = get_conn()
@@ -416,7 +418,20 @@ def get_users(
         cur.execute(f"SELECT COUNT(*) as cnt FROM users {where_clause}", params)
         total = cur.fetchone()["cnt"]
 
-        sql = f"SELECT {col_str} FROM users {where_clause} ORDER BY {safe_sort_by} {safe_sort_dir}"
+        # Empty values go last either way; ties fall back to newest contact first
+        # so rows don't shift between pages
+        if safe_sort_by == "default":
+            # Default view: every status "New" contact first, then all the others;
+            # each group oldest added first (id breaks ties, e.g. rows from one import)
+            order = "(current_status = 'New') DESC, created_at ASC, id ASC"
+        else:
+            order = f"{safe_sort_by} {safe_sort_dir} NULLS LAST"
+            if safe_sort_by != "id":
+                order += ", id DESC"
+        # serial = position by date added across ALL contacts (oldest = 1), so a contact keeps its
+        # number under any filter or sort and there are no gaps when contacts are deleted
+        numbered = "(SELECT *, ROW_NUMBER() OVER (ORDER BY created_at, id) AS serial FROM users) AS users"
+        sql = f"SELECT {col_str} FROM {numbered} {where_clause} ORDER BY {order}"
         page = max(1, page)
         page_size = max(1, min(page_size if page_size else 100, 500))
         offset = (page - 1) * page_size
@@ -440,14 +455,47 @@ def get_user(user_id):
     return dict(row) if row else None
 
 
+CONTACT_FIELDS = {
+    "full_name", "designation", "company", "mobile", "email",
+    "social_category", "gender", "msme_type", "udyam_aadhaar",
+    "sector", "company_type", "address", "city",
+    "assigned_to", "priority", "interest_level", "notes",
+}
+
+
+def create_user(**fields):
+    """Insert a contact added by hand from the UI and return its id.
+
+    Blank values are stored as NULL. Like the Excel importer, a mobile that already
+    belongs to another contact is flagged via possible_duplicate_of, not rejected.
+    """
+    values = {k: (v.strip() if isinstance(v, str) else v) for k, v in fields.items() if k in CONTACT_FIELDS}
+    values = {k: v for k, v in values.items() if v not in ("", None)}
+    conn = get_conn()
+    try:
+        cur = conn.cursor()
+        if values.get("mobile"):
+            cur.execute("SELECT id FROM users WHERE mobile = %s ORDER BY id LIMIT 1", (values["mobile"],))
+            dup = cur.fetchone()
+            if dup:
+                values["possible_duplicate_of"] = dup["id"]
+        values["lead_source"] = "Manual entry"
+        values["source_file"] = "Manual entry"
+        cols = list(values)
+        cur.execute(
+            f"INSERT INTO users ({', '.join(cols)}) VALUES ({', '.join(['%s'] * len(cols))}) RETURNING id",
+            [values[c] for c in cols],
+        )
+        new_id = cur.fetchone()["id"]
+        conn.commit()
+        cur.close()
+    finally:
+        conn.close()
+    return new_id
+
+
 def update_user(user_id, **fields):
-    allowed = {
-        "full_name", "designation", "company", "mobile", "email",
-        "social_category", "gender", "msme_type", "udyam_aadhaar",
-        "sector", "company_type", "address", "city",
-        "assigned_to", "priority", "interest_level", "notes",
-    }
-    updates = {k: v for k, v in fields.items() if k in allowed}
+    updates = {k: v for k, v in fields.items() if k in CONTACT_FIELDS}
     if not updates:
         return
     set_parts = []
@@ -466,6 +514,31 @@ def update_user(user_id, **fields):
         cur.close()
     finally:
         conn.close()
+
+
+def delete_user(user_id):
+    """Delete a contact and its follow-ups (they cascade). Returns False if it didn't exist."""
+    return delete_users([user_id]) > 0
+
+
+def delete_users(user_ids):
+    """Delete several contacts (and their follow-ups) in one transaction; returns how many were deleted."""
+    ids = [int(i) for i in user_ids]
+    if not ids:
+        return 0
+    conn = get_conn()
+    try:
+        cur = conn.cursor()
+        # Other contacts may point at these as a possible duplicate; that FK has no
+        # ON DELETE rule, so clear those links first or the delete would fail
+        cur.execute("UPDATE users SET possible_duplicate_of = NULL WHERE possible_duplicate_of = ANY(%s)", (ids,))
+        cur.execute("DELETE FROM users WHERE id = ANY(%s)", (ids,))
+        deleted = cur.rowcount
+        conn.commit()
+        cur.close()
+    finally:
+        conn.close()
+    return deleted
 
 
 def get_followups(user_id):
@@ -629,40 +702,40 @@ def fmt_date(val):
         return str(val)
 
 
-def get_contacts_by_date(date_str: str):
-    """Return contacts who had any outbound follow-up on the given date (YYYY-MM-DD).
+def get_contacts_by_date(date_str: str, end_str: str | None = None):
+    """Return outbound follow-ups on an IST date, or an IST date range when end_str is given.
 
-    followup_at is stored as a naive TIMESTAMP whose wall-clock value is already in IST
-    (the frontend sends nowIST() — a local IST string with no timezone suffix).
-    We must NOT apply AT TIME ZONE 'Asia/Kolkata' here, because that would tell
-    PostgreSQL to treat the stored value as UTC and shift it +5:30, causing
-    late-evening IST follow-ups (e.g. 11 PM IST stored as 23:00) to appear under
-    the *next* calendar date.  A plain ::date cast gives the correct IST date.
+    followup_at is stored as a naive UTC TIMESTAMP (the frontend converts with
+    istLocalToUTC before saving), so convert to IST before taking the date —
+    otherwise calls made between 00:00 and 05:30 IST land on the previous day.
     """
+    end_str = end_str or date_str
+    ist_date = "(f.followup_at AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Kolkata')::date"
     conn = get_conn()
     try:
         cur = conn.cursor()
         cur.execute(
-            """
+            f"""
             SELECT u.id, u.full_name, u.company, u.mobile, u.designation,
                    u.city, u.sector, u.current_status,
-                   f.followup_at, f.channel, f.contacted_by, f.our_notes
+                   f.followup_at, f.channel, f.contacted_by, f.our_notes,
+                   f.call_result, f.status_after
             FROM followups f
             JOIN users u ON u.id = f.user_id
-            WHERE f.followup_at::date = %s
+            WHERE {ist_date} BETWEEN %s AND %s
               AND f.direction = 'Outbound'
             ORDER BY f.followup_at DESC
             """,
-            (date_str,),
+            (date_str, end_str),
         )
         rows = cur.fetchall()
         cur.execute(
-            """SELECT COUNT(DISTINCT user_id) FROM followups
-               WHERE followup_at::date = %s AND direction = 'Outbound'""",
-            (date_str,),
+            f"""SELECT COUNT(DISTINCT user_id) FROM followups f
+               WHERE {ist_date} BETWEEN %s AND %s AND direction = 'Outbound'""",
+            (date_str, end_str),
         )
         count = cur.fetchone()["count"]
         cur.close()
     finally:
         conn.close()
-    return {"date": date_str, "count": count, "contacts": [dict(r) for r in rows]}
+    return {"date": date_str, "end": end_str, "count": count, "contacts": [dict(r) for r in rows]}

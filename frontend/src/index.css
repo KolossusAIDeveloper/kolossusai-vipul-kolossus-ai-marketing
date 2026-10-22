@@ -172,7 +172,6 @@ html.dark .brand-gradient::before { opacity: 1; }
 .fu-control:disabled { cursor: not-allowed; }
 textarea.fu-control { resize: vertical; }
 input[type=datetime-local].fu-control { font-size: 13px; letter-spacing: -0.01em; }
-.fu-status { width: 30px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; }
 /* Profile edit form: same boxed fields, but keeps its original small grey label font */
 .pf-edit .fu-label { font-size: 12px; font-weight: 400; letter-spacing: normal; text-transform: none; color: #6b7280; }
 
@@ -799,7 +798,6 @@ html.dark .chart-tip-value span { color: #94a3b8; }
 .contacts-table tbody tr:hover { background: #FBF7F0; }
 .id-chip { font-family: ui-monospace, monospace; font-size: 11px; font-weight: 700; color: #6b7280; background: #f3f2ee; padding: 2px 6px; border-radius: 6px; }
 .calls-chip { display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; border-radius: 999px; font-size: 11.5px; font-weight: 700; background: #F3EAD9; color: #6B4423; }
-.row-view { padding: 4px 12px; font-size: 12px; white-space: nowrap; transition: opacity 0.15s; }
 
 html.dark .search-box { background: #0f172a; border-color: #334155; color: #2FF3E0; box-shadow: none; }
 html.dark .search-box:focus-within { border-color: #2FF3E0; box-shadow: 0 0 0 3px rgb(47 243 224 / 0.18), 0 0 12px rgb(47 243 224 / 0.15); }
@@ -858,3 +856,544 @@ html.dark .dashboard-page .kpi-card:hover {
   border-color: rgb(47 243 224 / 0.5);
   box-shadow: 0 0 14px rgb(47 243 224 / 0.15), 0 16px 36px rgb(0 0 0 / 0.55);
 }
+
+/* ------------------------------------------------------------------
+   Daily Activity page (pages/DailyActivity.tsx)
+   Cream + brown to match the sidebar; dark mode below.
+   ------------------------------------------------------------------ */
+.da-round-btn {
+  width: 36px; height: 36px; border-radius: 9999px;
+  display: inline-flex; align-items: center; justify-content: center;
+  border: 1px solid #e5ded0; color: #4b3f2f; background: #fff;
+}
+.da-round-btn:hover:not(:disabled) { background: #f6f1e7; }
+.da-round-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+
+.da-date-input {
+  border: 1px solid #e5ded0; border-radius: 9999px; padding: 8px 16px;
+  font-size: 0.95rem; font-weight: 500; color: #2b2116; background: #fff;
+}
+.da-date-input:focus { outline: none; border-color: #8b5a2b; box-shadow: 0 0 0 3px rgb(139 90 43 / 0.15); }
+
+.da-seg { display: inline-flex; padding: 4px; border-radius: 9999px; background: #f1e6ce; }
+.da-seg-btn { padding: 6px 14px; border-radius: 9999px; font-size: 0.875rem; font-weight: 600; color: #5c4630; }
+.da-seg-btn:hover { color: #2b2116; }
+.da-seg-btn.is-active { background: #fff; color: #2b2116; box-shadow: 0 1px 3px rgb(60 40 20 / 0.15); }
+
+.da-hero-card { background: linear-gradient(135deg, #8b5a2b 0%, #5e3a1a 100%); color: #fff; }
+
+.da-bar { height: 4px; border-radius: 9999px; background: #ebe4d6; overflow: hidden; }
+.da-bar-fill { height: 100%; border-radius: 9999px; transition: width 0.3s ease; }
+
+.da-thead { background: #faf6ee; color: #6b5a45; }
+.da-row:hover { background: #fbf7ef; }
+
+.da-avatar {
+  width: 38px; height: 38px; border-radius: 9999px; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  background: #f3e6cf; color: #7a4e22; font-weight: 700; font-size: 0.85rem;
+}
+.da-by {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 34px; height: 26px; padding: 0 8px; border-radius: 9999px;
+  background: #ece6dc; color: #5c4f40; font-size: 0.7rem; font-weight: 700;
+}
+
+
+
+html.dark .da-round-btn,
+html.dark .da-date-input { background: #0f172a; border-color: #334155; color: #e2e8f0; }
+html.dark .da-round-btn:hover:not(:disabled) { background: #172234; border-color: #2FF3E0; color: #2FF3E0; }
+html.dark .da-date-input:focus { border-color: #2FF3E0; box-shadow: 0 0 0 3px rgb(47 243 224 / 0.18); }
+html.dark .da-hero-card { background: linear-gradient(90deg, #4E148C 0%, #02C3BD 100%); box-shadow: 0 4px 14px rgb(2 195 189 / 0.20); }
+html.dark .da-seg { background: #0f172a; }
+html.dark .da-seg-btn { color: #94a3b8; }
+html.dark .da-seg-btn:hover { color: #e2e8f0; }
+html.dark .da-seg-btn.is-active { background: linear-gradient(90deg, #4E148C 0%, #02C3BD 100%); color: #fff; box-shadow: none; }
+html.dark .da-bar { background: #334155; }
+html.dark .da-thead { background: #172234; color: #94a3b8; }
+html.dark .da-row:hover { background: #273449; }
+html.dark .da-avatar { background: #172234; color: #2FF3E0; box-shadow: inset 0 0 0 1px rgb(47 243 224 / 0.35); }
+html.dark .da-by { background: #334155; color: #cbd5e1; }
+
+/* ------------------------------------------------------------------
+   Import page (pages/ImportPage.tsx) — cream shell, tan dashed drop zone
+   ------------------------------------------------------------------ */
+.import-shell { background: #f7f5f0; border: 1px solid #ebe6dc; }
+.import-card { border: 1px solid #ece7de; box-shadow: 0 1px 2px rgb(60 40 20 / 0.04); }
+.import-muted { color: #b8b2a7; }
+
+.drop-zone.import-drop { min-height: 260px; padding: 28px 20px; border: 2px dashed #e2b98a; border-radius: 12px; background: #fffcf6; gap: 4px; }
+.drop-zone.import-drop:hover, .drop-zone.import-drop.is-dragging { border-color: #a8692f; background: #fbf4e8; }
+.drop-icon.import-drop-icon { width: 44px; height: 44px; background: #f5e4cf; color: #5c4630; margin-bottom: 8px; }
+
+.import-btn {
+  padding: 8px 20px; border-radius: 8px; font-size: 0.85rem; font-weight: 700;
+  color: #fff; background: #a8692f; transition: background 0.15s;
+}
+.import-btn:hover { background: #8b5524; }
+.import-btn-soft {
+  padding: 8px 20px; border-radius: 8px; font-size: 0.85rem; font-weight: 700;
+  color: #6b4423; background: #efe3d3; transition: background 0.15s;
+}
+.import-btn-soft:hover { background: #e6d5bf; }
+
+html.dark .import-shell { background: #131d2e; border-color: #1e293b; }
+html.dark .import-card { border-color: #334155; }
+html.dark .import-muted { color: #64748b; }
+html.dark .drop-zone.import-drop { background: #0f172a; border-color: rgb(47 243 224 / 0.45); }
+html.dark .drop-zone.import-drop:hover, html.dark .drop-zone.import-drop.is-dragging { border-color: #2FF3E0; background: #172234; }
+html.dark .drop-icon.import-drop-icon { background: #172234; color: #2FF3E0; }
+html.dark .import-btn { background: linear-gradient(90deg, #4E148C 0%, #02C3BD 100%); color: #fff; box-shadow: 0 4px 14px rgb(2 195 189 / 0.20); }
+html.dark .import-btn:hover { background: linear-gradient(90deg, #4E148C 0%, #02C3BD 100%); filter: brightness(1.1); }
+html.dark .import-btn-soft { background: #0f172a; color: #2FF3E0; box-shadow: inset 0 0 0 1.5px rgb(47 243 224 / 0.6); }
+html.dark .import-btn-soft:hover { background: #172234; box-shadow: inset 0 0 0 1.5px #2FF3E0, 0 0 10px rgb(47 243 224 / 0.25); }
+
+/* ------------------------------------------------------------------
+   Contacts page buttons (pages/Contacts.tsx)
+   Solid brown for main actions, white + tan outline for secondary ones.
+   Kept separate from .btn-brown / .edit-btn, which other pages share.
+   ------------------------------------------------------------------ */
+.ct-btn, .ct-btn-outline {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 8px 16px; border-radius: 8px;
+  font-size: 0.85rem; font-weight: 700; white-space: nowrap;
+  transition: background 0.15s, border-color 0.15s, box-shadow 0.15s;
+}
+.ct-btn { color: #fff; background: #7b4a26; border: 1px solid #7b4a26; box-shadow: 0 1px 3px rgb(60 40 20 / 0.2); }
+.ct-btn:hover { background: #643b1d; border-color: #643b1d; }
+.ct-btn-outline { color: #7b4a26; background: #fff; border: 1px solid #e2c9a8; }
+.ct-btn-outline:hover { background: #fbf4e8; border-color: #c9a273; }
+.ct-btn-sm { padding: 4px 12px; font-size: 0.75rem; }
+.ct-btn .filter-count { background: #fff; color: #7b4a26; }
+
+/* Brown focus ring and pagination on the Contacts page instead of teal */
+.search-box:focus-within { border-color: #a8692f; box-shadow: 0 0 0 3px rgb(168 105 47 / 0.15); }
+.table-bar .ctl-sm { border-color: #e2c9a8; border-radius: 8px; }
+.table-bar .ctl-sm:focus { border-color: #a8692f; box-shadow: 0 0 0 3px rgb(168 105 47 / 0.15); }
+
+html.dark .ct-btn { background: linear-gradient(90deg, #4E148C 0%, #02C3BD 100%); border-color: transparent; color: #fff; box-shadow: 0 4px 14px rgb(2 195 189 / 0.20); }
+html.dark .ct-btn:hover { background: linear-gradient(90deg, #4E148C 0%, #02C3BD 100%); filter: brightness(1.1); }
+html.dark .ct-btn-outline { background: #0f172a; border-color: #334155; color: #e2e8f0; }
+html.dark .ct-btn-outline:hover { background: #172234; border-color: #2FF3E0; color: #2FF3E0; }
+html.dark .ct-btn .filter-count { background: #0f172a; color: #2FF3E0; }
+html.dark .search-box:focus-within { border-color: #2FF3E0; box-shadow: 0 0 0 3px rgb(47 243 224 / 0.18), 0 0 12px rgb(47 243 224 / 0.15); }
+html.dark .table-bar .ctl-sm { border-color: #334155; }
+html.dark .table-bar .ctl-sm:focus { border-color: #2FF3E0; box-shadow: 0 0 0 3px rgb(47 243 224 / 0.18); }
+
+/* Contacts filter panel: status tags, e.g. "● New (12)" */
+.fp-tag {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 4px 10px; border-radius: 999px;
+  font-size: 12px; font-weight: 600; color: #4b3f2f;
+  background: #fff; border: 1px solid #e5ded0;
+  transition: background 0.15s, border-color 0.15s;
+}
+.fp-tag:hover { background: #fbf4e8; border-color: #c9a273; }
+.fp-tag.is-on { background: #7b4a26; border-color: #7b4a26; color: #fff; }
+.fp-tag.is-on .pipe-dot { box-shadow: 0 0 0 1.5px #fff; }
+
+html.dark .fp-tag { background: #0f172a; border-color: #334155; color: #cbd5e1; }
+html.dark .fp-tag:hover { background: #172234; border-color: #2FF3E0; }
+html.dark .fp-tag.is-on { background: linear-gradient(90deg, #4E148C 0%, #02C3BD 100%); border-color: transparent; color: #fff; }
+
+/* Sidebar account menu: username button opens a small pop-up with Logout */
+.account-avatar {
+  width: 32px; height: 32px; border-radius: 999px; flex-shrink: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-weight: 700; font-size: 0.85rem; text-shadow: none;
+  background: #7b4a26; color: #fff;
+}
+.account-avatar.is-sm { width: 24px; height: 24px; font-size: 0.72rem; }
+.account-menu {
+  position: absolute; left: 0; right: 0; bottom: calc(100% + 8px); z-index: 30;
+  padding: 6px; border-radius: 12px; text-shadow: none;
+  background: #fff; color: #2b2116; border: 1px solid #ebe4d6;
+  box-shadow: 0 10px 30px rgb(60 40 20 / 0.22);
+}
+.account-menu-head { display: flex; align-items: center; gap: 10px; padding: 8px 8px 10px; border-bottom: 1px solid #f0ebe1; margin-bottom: 4px; }
+.account-menu-item {
+  width: 100%; display: flex; align-items: center; gap: 8px;
+  padding: 8px; border-radius: 8px; font-size: 0.875rem; font-weight: 600; color: #b91c1c;
+}
+.account-menu-item:hover { background: #fef2f2; }
+
+html.dark .account-avatar { background: linear-gradient(90deg, #4E148C 0%, #02C3BD 100%); }
+html.dark .account-menu { background: #1e293b; color: #e2e8f0; border-color: #334155; box-shadow: 0 10px 30px rgb(0 0 0 / 0.45); }
+html.dark .account-menu-head { border-bottom-color: #334155; }
+html.dark .account-menu-item { color: #fca5a5; }
+html.dark .account-menu-item:hover { background: rgb(239 68 68 / 0.12); }
+
+/* ------------------------------------------------------------------
+   Responsive: phone top bar, and small-screen tweaks
+   ------------------------------------------------------------------ */
+.mobile-topbar { background: #f1e6ce; color: #3b2f1e; border-bottom: 1px solid rgb(0 0 0 / 0.06); position: sticky; top: 0; z-index: 20; }
+.mobile-menu-btn {
+  width: 36px; height: 36px; border-radius: 10px;
+  display: inline-flex; align-items: center; justify-content: center;
+  color: #6b4423; background: rgb(255 255 255 / 0.6);
+}
+.mobile-menu-btn:hover { background: #fff; }
+html.dark .mobile-topbar { background: #1e293b; color: #f1f5f9; border-bottom-color: #334155; }
+html.dark .mobile-menu-btn { color: #2FF3E0; background: #0f172a; }
+
+@media (max-width: 1023px) {
+  /* Filter panel sits above the table: lay its sections out in columns */
+  .filter-panel { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); align-items: start; }
+  .filter-panel > .sum-label,
+  .filter-panel > div:has(.fp-tag),
+  .filter-panel > button { grid-column: 1 / -1; }
+}
+@media (max-width: 639px) {
+  .table-bar { padding: 8px 10px; }
+  .fp-options { max-height: 160px; overflow-y: auto; }
+  .da-seg-btn { padding: 6px 10px; }
+}
+/* .brand-gradient sets position: relative after Tailwind loads; keep the phone sidebar fixed */
+/* .app-bg > * also forces position: relative and z-index: 1 on the sidebar and backdrop */
+@media (max-width: 767px) {
+  .app-bg > .sidebar-panel.brand-gradient { position: fixed; z-index: 40; }
+  .app-bg > .nav-backdrop { position: fixed; z-index: 30; }
+}
+
+/* ------------------------------------------------------------------
+   Dropdown options: give the open list its own colours.
+   .fu-control selects have a transparent background (dark mode forces it with
+   !important), so the option list fell back to white behind light grey text.
+   ------------------------------------------------------------------ */
+select option { background-color: #fff; color: #111827; }
+select option:checked { background-color: #f1e6ce; color: #3b2410; }
+select option:disabled { color: #9ca3af; }
+.fu-control:is(select) { color: #111827; cursor: pointer; }
+html.dark select option { background-color: #1e293b; color: #f1f5f9; }
+html.dark select option:checked { background-color: #134e4a; color: #ffffff; }
+html.dark select option:disabled { color: #64748b; }
+html.dark .fu-control:is(select) { color: #f1f5f9; }
+
+/* ------------------------------------------------------------------
+   Notifications (components/Toast.tsx)
+   ------------------------------------------------------------------ */
+.toast-stack {
+  position: fixed; top: 16px; right: 16px; z-index: 100;
+  display: flex; flex-direction: column; gap: 10px;
+  width: min(360px, calc(100vw - 32px)); pointer-events: none;
+}
+.toast {
+  pointer-events: auto;
+  display: flex; align-items: flex-start; gap: 10px;
+  padding: 12px 12px 12px 14px; border-radius: 12px;
+  background: #fff; color: #1f2937;
+  border: 1px solid #ece7de; border-left-width: 4px;
+  box-shadow: 0 10px 28px rgb(60 40 20 / 0.18);
+  animation: toast-in 0.22s ease-out;
+}
+.toast-icon {
+  width: 26px; height: 26px; flex-shrink: 0; border-radius: 999px;
+  display: inline-flex; align-items: center; justify-content: center; color: #fff;
+}
+.toast-title { font-weight: 700; font-size: 0.9rem; line-height: 1.3; }
+.toast-msg { font-size: 0.8rem; color: #4b5563; margin-top: 2px; line-height: 1.35; overflow-wrap: anywhere; }
+.toast-close { color: #9ca3af; font-size: 12px; padding: 2px 6px; border-radius: 6px; }
+.toast-close:hover { color: #374151; background: #f3f4f6; }
+
+.toast.is-success { border-left-color: #16a34a; } .toast.is-success .toast-icon { background: #16a34a; }
+.toast.is-error   { border-left-color: #dc2626; } .toast.is-error .toast-icon   { background: #dc2626; }
+.toast.is-info    { border-left-color: #8b5a2b; } .toast.is-info .toast-icon    { background: #8b5a2b; }
+.toast.is-warning { border-left-color: #d97706; } .toast.is-warning .toast-icon { background: #d97706; }
+
+@keyframes toast-in { from { opacity: 0; transform: translateY(-8px) scale(0.98); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .toast { animation: none; } }
+
+/* Phones: full width at the top, just under the sticky top bar (~60px) so the page title stays visible */
+@media (max-width: 767px) {
+  .toast-stack { top: 68px; bottom: auto; left: 12px; right: 12px; width: auto; }
+}
+
+html.dark .toast { background: #1e293b; color: #f1f5f9; border-color: #334155; box-shadow: 0 10px 28px rgb(0 0 0 / 0.5); }
+html.dark .toast-msg { color: #cbd5e1; }
+html.dark .toast-close:hover { color: #f1f5f9; background: #334155; }
+html.dark .toast.is-success { border-left-color: #22c55e; }
+html.dark .toast.is-error { border-left-color: #ef4444; }
+html.dark .toast.is-info { border-left-color: #2FF3E0; } html.dark .toast.is-info .toast-icon { background: #0d9488; }
+html.dark .toast.is-warning { border-left-color: #f59e0b; }
+
+/* ------------------------------------------------------------------
+   Confirm dialog (components/ConfirmDialog.tsx) — centred, replaces window.confirm
+   ------------------------------------------------------------------ */
+.confirm-backdrop {
+  position: fixed; inset: 0; z-index: 90;
+  display: flex; align-items: center; justify-content: center; padding: 16px;
+  background: rgb(15 23 42 / 0.55); backdrop-filter: blur(2px);
+  animation: confirm-fade 0.15s ease-out;
+}
+.confirm-box {
+  width: 100%; max-width: 420px; padding: 24px; border-radius: 16px; text-align: center;
+  background: #fff; color: #1f2937; border: 1px solid #ece7de;
+  box-shadow: 0 24px 60px rgb(0 0 0 / 0.3);
+  animation: confirm-pop 0.18s ease-out;
+}
+.confirm-icon {
+  width: 48px; height: 48px; margin: 0 auto 12px; border-radius: 999px;
+  display: flex; align-items: center; justify-content: center;
+  background: #fee2e2; color: #dc2626;
+}
+.confirm-title { font-size: 1.1rem; font-weight: 700; color: #111827; }
+.confirm-msg { margin-top: 8px; font-size: 0.875rem; line-height: 1.5; color: #4b5563; }
+.confirm-actions { display: flex; gap: 10px; justify-content: center; margin-top: 20px; }
+.confirm-btn { min-width: 110px; padding: 9px 18px; border-radius: 10px; font-size: 0.875rem; font-weight: 700; transition: background 0.15s, box-shadow 0.15s; }
+.confirm-btn:disabled { opacity: 0.6; cursor: progress; }
+.confirm-btn.is-cancel { background: #fff; color: #374151; border: 1px solid #d1d5db; }
+.confirm-btn.is-cancel:hover:not(:disabled) { background: #f3f4f6; }
+.confirm-btn.is-danger { background: #dc2626; color: #fff; border: 1px solid #dc2626; }
+.confirm-btn.is-danger:hover:not(:disabled) { background: #b91c1c; }
+.confirm-btn:focus-visible { outline: none; box-shadow: 0 0 0 3px rgb(139 90 43 / 0.35); }
+
+@keyframes confirm-fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes confirm-pop { from { opacity: 0; transform: scale(0.96); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .confirm-backdrop, .confirm-box { animation: none; } }
+
+html.dark .confirm-backdrop { background: rgb(2 6 23 / 0.7); }
+html.dark .confirm-box { background: #1e293b; color: #e2e8f0; border-color: #334155; }
+html.dark .confirm-icon { background: rgb(239 68 68 / 0.18); color: #f87171; }
+html.dark .confirm-title { color: #f1f5f9; }
+html.dark .confirm-msg { color: #cbd5e1; }
+html.dark .confirm-btn.is-cancel { background: #0f172a; color: #e2e8f0; border-color: #334155; }
+html.dark .confirm-btn.is-cancel:hover:not(:disabled) { background: #172234; border-color: #2FF3E0; }
+html.dark .confirm-btn.is-danger { background: #dc2626; border-color: #dc2626; }
+html.dark .confirm-btn:focus-visible { box-shadow: 0 0 0 3px rgb(47 243 224 / 0.4); }
+
+/* Close (✕) button inside the phone sidebar */
+.sidebar-close {
+  width: 34px; height: 34px; border-radius: 10px; flex-shrink: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+  color: inherit; background: rgb(255 255 255 / 0.25); text-shadow: none;
+}
+.sidebar-close:hover { background: rgb(255 255 255 / 0.45); }
+html.dark .sidebar-close { color: #2FF3E0; background: #0f172a; }
+html.dark .sidebar-close:hover { background: #172234; }
+
+/* ===== Contacts: status tiles (replace the old status pills) ===== */
+/* 12 statuses: 6 per row on wide screens, 4 on laptops, 3 on tablets, 2 on phones — so names stay on one line */
+.status-tiles { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 12px; }
+@media (max-width: 1439px) { .status-tiles { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+@media (max-width: 1023px) { .status-tiles { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+.status-tile {
+  --tint: color-mix(in srgb, var(--c) 13%, #fff);
+  --ring: color-mix(in srgb, var(--c) 24%, transparent);
+  position: relative; overflow: hidden; height: 58px; padding: 0 14px 3px;
+  display: flex; align-items: center; gap: 10px; text-align: left;
+  background: #fff; border: 1.5px solid #ece4d8; border-radius: 12px;
+  box-shadow: 0 1px 2px rgb(60 40 20 / 0.05);
+  transition: transform 0.15s, box-shadow 0.15s, border-color 0.15s, background 0.15s;
+}
+.status-tile::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 3px; background: var(--c); opacity: 0.85; }
+.status-tile:hover { transform: translateY(-2px); box-shadow: 0 6px 16px rgb(60 40 20 / 0.10); }
+.status-tile .st-icon { flex-shrink: 0; width: 32px; height: 32px; border-radius: 10px; display: grid; place-items: center; background: var(--tint); color: var(--c); transition: background 0.15s, color 0.15s; }
+.status-tile .st-icon svg { width: 18px; height: 18px; }
+.status-tile .st-num { flex-shrink: 0; font-size: 22px; font-weight: 700; line-height: 1; color: #2b2622; }
+.status-tile .st-label { flex: 1; min-width: 0; font-size: 13px; font-weight: 600; color: #4d453f; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.status-tile.is-on { border-color: var(--c); background: var(--tint); box-shadow: 0 0 0 3px var(--ring); }
+.status-tile.is-on .st-icon { background: var(--c); color: #fff; }
+html.dark .status-tile { --tint: color-mix(in srgb, var(--c) 22%, #1e293b); background: #1e293b; border-color: #334155; box-shadow: 0 4px 12px rgb(0 0 0 / 0.25); }
+html.dark .status-tile .st-num { color: #f1f5f9; }
+html.dark .status-tile .st-label { color: #cbd5e1; }
+@media (max-width: 639px) {
+  .status-tiles { grid-template-columns: repeat(2, 1fr); gap: 8px; }
+  .status-tile { height: 52px; padding: 0 10px 3px; gap: 8px; }
+  .status-tile .st-icon { width: 28px; height: 28px; }
+  .status-tile .st-num { font-size: 18px; }
+  .status-tile .st-label { font-size: 12px; }
+}
+
+/* Search sits in the middle of the table bar; full width on its own row on phones */
+.table-bar-search { flex: 1 1 280px; max-width: 520px; height: 36px; }
+@media (max-width: 639px) { .table-bar-search { order: -1; max-width: none; flex-basis: 100%; } }
+
+/* ------------------------------------------------------------------
+   IST date + time picker (components/ISTDateTimePicker.tsx).
+   Colours live here, not inline, so dark mode can change them; the
+   .fu-control dark rule makes its background transparent with !important.
+   ------------------------------------------------------------------ */
+.fu-control.ist-input {
+  padding: 8px 12px; border-radius: 8px; border: 1.5px solid #d1d5db;
+  font-size: 14px; color: #111827; background: #fff; cursor: pointer; outline: none;
+}
+.fu-control.ist-input:focus { border-color: #a8692f; box-shadow: 0 0 0 3px rgb(168 105 47 / 0.15); }
+.fu-control.ist-input:disabled { color: #9ca3af; background: #f9fafb; cursor: not-allowed; }
+.ist-label { font-size: 13px; font-weight: 500; color: #374151; }
+.ist-tz { font-size: 12px; color: #6b7280; white-space: nowrap; }
+
+html.dark .fu-control.ist-input { color: #f1f5f9; background: #1e293b !important; border-color: #475569; color-scheme: dark; }
+html.dark .fu-control.ist-input:focus { border-color: #2FF3E0; box-shadow: 0 0 0 3px rgb(47 243 224 / 0.18); }
+html.dark .fu-control.ist-input:disabled { color: #64748b; background: #0f172a !important; border-color: #334155; }
+html.dark .ist-label { color: #cbd5e1; }
+html.dark .ist-tz { color: #94a3b8; }
+
+/* ------------------------------------------------------------------
+   Browser autofill: Chrome paints saved values (name, email…) on its own
+   light-blue / grey band. Repaint it with the field's normal colours.
+   A large inset shadow is the only way to cover Chrome's autofill fill.
+   ------------------------------------------------------------------ */
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus,
+textarea:-webkit-autofill,
+select:-webkit-autofill {
+  -webkit-box-shadow: 0 0 0 1000px #fff inset !important;
+  -webkit-text-fill-color: #111827 !important;
+  caret-color: #111827;
+  transition: background-color 9999s ease-out 0s;
+}
+html.dark input:-webkit-autofill,
+html.dark input:-webkit-autofill:hover,
+html.dark input:-webkit-autofill:focus,
+html.dark textarea:-webkit-autofill,
+html.dark select:-webkit-autofill {
+  -webkit-box-shadow: 0 0 0 1000px #0f172a inset !important;
+  -webkit-text-fill-color: #e2e8f0 !important;
+  caret-color: #e2e8f0;
+}
+
+/* Contacts table: ⋮ row menu (components/RowMenu.tsx) */
+.row-menu-btn {
+  width: 30px; height: 30px; border-radius: 8px;
+  display: inline-flex; align-items: center; justify-content: center;
+  color: #6b5a45; background: transparent; border: 1px solid transparent;
+  transition: background 0.15s, border-color 0.15s;
+}
+.row-menu-btn:hover, .row-menu-btn.is-open { background: #f6efe3; border-color: #e2c9a8; color: #3b2410; }
+.row-menu {
+  position: fixed; z-index: 80; min-width: 160px; padding: 6px; border-radius: 12px;
+  background: #fff; border: 1px solid #ece7de; box-shadow: 0 12px 30px rgb(60 40 20 / 0.2);
+}
+.row-menu-item {
+  width: 100%; display: flex; align-items: center; gap: 10px;
+  padding: 8px 10px; border-radius: 8px; font-size: 0.875rem; font-weight: 600; color: #374151; text-align: left;
+}
+.row-menu-item:hover, .row-menu-item:focus-visible { background: #f6efe3; outline: none; }
+.row-menu-item.is-danger { color: #dc2626; }
+.row-menu-item.is-danger:hover, .row-menu-item.is-danger:focus-visible { background: #fef2f2; }
+html.dark .row-menu-btn { color: #94a3b8; }
+html.dark .row-menu-btn:hover, html.dark .row-menu-btn.is-open { background: #0f172a; border-color: #2FF3E0; color: #2FF3E0; }
+html.dark .row-menu { background: #1e293b; border-color: #334155; box-shadow: 0 12px 30px rgb(0 0 0 / 0.5); }
+html.dark .row-menu-item { color: #e2e8f0; }
+html.dark .row-menu-item:hover, html.dark .row-menu-item:focus-visible { background: #273449; }
+html.dark .row-menu-item.is-danger { color: #f87171; }
+html.dark .row-menu-item.is-danger:hover, html.dark .row-menu-item.is-danger:focus-visible { background: rgb(239 68 68 / 0.12); }
+
+/* Contacts: row checkboxes and the "N selected · Delete selected" bar */
+.sel-col { width: 40px; padding-left: 14px !important; padding-right: 0 !important; cursor: default; }
+.sel-box { width: 16px; height: 16px; accent-color: #7b4a26; cursor: pointer; vertical-align: middle; }
+.contacts-table tbody tr.is-selected { background: #fbf4e8; }
+.bulk-bar {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 10px;
+  padding: 10px 14px; border-radius: 12px; font-size: 0.875rem;
+  background: #fff7ed; color: #7c2d12; border: 1px solid #fed7aa;
+  /* Stays in view while scrolling a long list, so Delete selected is always reachable */
+  position: sticky; top: 8px; z-index: 15; box-shadow: 0 6px 18px rgb(60 40 20 / 0.12);
+}
+.bulk-delete-btn {
+  margin-left: auto; display: inline-flex; align-items: center; gap: 6px;
+  padding: 6px 14px; border-radius: 8px; font-size: 0.8rem; font-weight: 700;
+  color: #fff; background: #dc2626; border: 1px solid #dc2626; transition: background 0.15s;
+}
+.bulk-delete-btn:hover:not(:disabled) { background: #b91c1c; }
+.bulk-delete-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+html.dark .sel-box { accent-color: #2FF3E0; }
+html.dark .contacts-table tbody tr.is-selected { background: rgb(47 243 224 / 0.08); }
+html.dark .bulk-bar { background: #2a1d24; color: #fecaca; border-color: rgb(239 68 68 / 0.35); box-shadow: 0 6px 18px rgb(0 0 0 / 0.4); }
+
+/* Contacts table: keep the ⋮ column pinned to the right edge, since the table
+   is wider than most screens and scrolls sideways inside its card */
+.contacts-table th:last-child,
+.contacts-table td:last-child {
+  position: sticky; right: 0; z-index: 2;
+  width: 48px; padding-left: 6px; padding-right: 10px;
+  background: #fff; box-shadow: -8px 0 10px -8px rgb(60 40 20 / 0.18);
+}
+.contacts-table thead th:last-child { z-index: 11; background: #F7F1E6; }
+.contacts-table tbody tr:hover td:last-child { background: #FBF7F0; }
+.contacts-table tbody tr.is-selected td:last-child { background: #fbf4e8; }
+html.dark .contacts-table td:last-child { background: #1e293b; box-shadow: -8px 0 10px -8px rgb(0 0 0 / 0.5); }
+html.dark .contacts-table thead th:last-child { background: #172234; }
+html.dark .contacts-table tbody tr:hover td:last-child { background: #1b2840; }
+html.dark .contacts-table tbody tr.is-selected td:last-child { background: #1a2c3a; }
+
+/* Contacts on phones: a single Status dropdown replaces the status tiles */
+.status-select {
+  position: relative; display: flex; align-items: center; gap: 10px;
+  padding: 6px 12px; border-radius: 12px; background: #fff;
+  border: 1.5px solid #ece4d8; box-shadow: 0 1px 2px rgb(60 40 20 / 0.05);
+}
+.status-select:focus-within { border-color: #a8692f; box-shadow: 0 0 0 3px rgb(168 105 47 / 0.15); }
+.status-select-dot { width: 10px; height: 10px; border-radius: 999px; flex-shrink: 0; box-shadow: 0 0 0 1.5px #d6cbb8; }
+.status-select-label { font-size: 12px; font-weight: 700; color: #8b5a2b; text-transform: uppercase; letter-spacing: 0.05em; flex-shrink: 0; }
+.status-select-control {
+  flex: 1; min-width: 0; height: 36px; border: 0; outline: 0; background: transparent;
+  font-size: 15px; font-weight: 600; color: #2b2622; cursor: pointer;
+}
+html.dark .status-select { background: #1e293b; border-color: #334155; }
+html.dark .status-select:focus-within { border-color: #2FF3E0; box-shadow: 0 0 0 3px rgb(47 243 224 / 0.18); }
+html.dark .status-select-dot { box-shadow: 0 0 0 1.5px #475569; }
+html.dark .status-select-label { color: #C8A27A; }
+html.dark .status-select-control { color: #f1f5f9; background: transparent !important; }
+/* Phones show the dropdown, larger screens the tiles (set here: these classes load after Tailwind's hidden/sm:hidden) */
+@media (min-width: 640px) { .status-select { display: none; } }
+@media (max-width: 639px) { .status-tiles { display: none; } }
+
+
+/* The phone Status dropdown is now a plain box itself, so its wrapper is just a row */
+.status-select, html.dark .status-select { padding: 0; background: transparent; border: 0; box-shadow: none; }
+.status-select:focus-within, html.dark .status-select:focus-within { border: 0; box-shadow: none; }
+
+/* ------------------------------------------------------------------
+   Dropdowns (components/Select.tsx): the button and the open list are both
+   ours, so they follow the theme — cream and brown in light mode,
+   navy and teal in dark mode — and look the same on every device.
+   ------------------------------------------------------------------ */
+.ui-select {
+  display: inline-flex; align-items: center; gap: 8px; width: 100%; min-width: 0;
+  height: 38px; padding: 0 10px 0 12px; border-radius: 10px; text-align: left;
+  font-size: 14px; color: #1f2937; background: #fff; border: 1px solid #e2d6c3;
+  cursor: pointer; transition: border-color 0.15s, box-shadow 0.15s, background 0.15s;
+}
+.ui-select.is-sm { width: auto; height: 32px; padding: 0 8px 0 10px; border-radius: 8px; font-size: 13px; }
+.ui-select:hover { border-color: #c9a273; }
+.ui-select:focus-visible, .ui-select.is-open { outline: none; border-color: #a8692f; box-shadow: 0 0 0 3px rgb(168 105 47 / 0.15); }
+.ui-select-value { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }
+.ui-select-value.is-placeholder { color: #9ca3af; font-weight: 400; }
+.ui-select-chevron { width: 16px; height: 16px; flex-shrink: 0; color: #8b5a2b; transition: transform 0.15s; }
+.ui-select.is-open .ui-select-chevron { transform: rotate(180deg); }
+.ui-select-dot { width: 9px; height: 9px; border-radius: 999px; flex-shrink: 0; box-shadow: 0 0 0 1.5px rgb(0 0 0 / 0.08); }
+/* Inside boxed form fields: sits under the label, a little tighter */
+.fu-body .ui-select { margin-top: 3px; height: 34px; }
+
+.ui-select-list {
+  position: fixed; z-index: 95; margin: 0; padding: 6px; list-style: none; overflow-y: auto;
+  background: #fffdf9; border: 1px solid #ece4d8; border-radius: 12px;
+  box-shadow: 0 14px 34px rgb(60 40 20 / 0.18), 0 2px 6px rgb(60 40 20 / 0.08);
+  animation: ui-select-in 0.12s ease-out;
+}
+.ui-select-option {
+  display: flex; align-items: center; gap: 10px; min-height: 38px; padding: 0 10px;
+  border-radius: 8px; font-size: 14px; color: #374151; cursor: pointer; user-select: none;
+}
+.ui-select-option.is-active { background: #f6efe3; color: #1f2937; }
+.ui-select-option.is-selected { color: #7b4a26; font-weight: 700; background: #f1e6ce; }
+.ui-select-check { width: 16px; height: 16px; flex-shrink: 0; color: #7b4a26; }
+@keyframes ui-select-in { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .ui-select-list { animation: none; } }
+/* Phones: bigger touch targets */
+@media (max-width: 639px) { .ui-select-option { min-height: 44px; font-size: 15px; } }
+
+html.dark .ui-select { color: #e2e8f0; background: #0f172a; border-color: #334155; }
+html.dark .ui-select:hover { border-color: #475569; }
+html.dark .ui-select:focus-visible, html.dark .ui-select.is-open { border-color: #2FF3E0; box-shadow: 0 0 0 3px rgb(47 243 224 / 0.18); }
+html.dark .ui-select-value.is-placeholder { color: #64748b; }
+html.dark .ui-select-chevron { color: #2FF3E0; }
+html.dark .ui-select-dot { box-shadow: 0 0 0 1.5px rgb(255 255 255 / 0.15); }
+html.dark .ui-select-list { background: #1e293b; border-color: #334155; box-shadow: 0 14px 34px rgb(0 0 0 / 0.55); }
+html.dark .ui-select-option { color: #cbd5e1; }
+html.dark .ui-select-option.is-active { background: #273449; color: #f1f5f9; }
+html.dark .ui-select-option.is-selected { color: #2FF3E0; background: rgb(47 243 224 / 0.1); }
+html.dark .ui-select-check { color: #2FF3E0; }
